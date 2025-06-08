@@ -76,8 +76,8 @@ def run_centralized_value_iteration():
                 value_function[pred_val_indices] = new_cost_for_pred
                 queue.append(predecessor_state)
 
-    print("DP cost propagation complete.")
-    return value_function
+    print(f"DP cost propagation complete. Total states processed: {count}")
+    return value_function, count
 
 
 def extract_path_from_value_function(value_function, agents):
@@ -228,23 +228,46 @@ def print_solution_details(solution):
             print("  >>> COLLISION HAPPENED! <<<")
 
 
+# In centralized_dp.py
 if __name__ == "__main__":
-    # 1. Run Value Iteration to compute the entire cost-to-go landscape
-    value_function = run_centralized_value_iteration()
+    import time
+    import tracemalloc
 
-    # 2. Extract the single optimal path from the DP table
-    solution = extract_path_from_value_function(value_function, AGENTS)
+    # --- Benchmarking for Centralized DP ---
+    tracemalloc.start()
+    start_time = time.perf_counter()
+
+    # Call the functions specific to this file
+    value_function, states_processed = run_centralized_value_iteration()
+    solution = None
+    if value_function is not None:
+        # This function doesn't need to return a count, it's just extracting the path
+        solution = extract_path_from_value_function(value_function, AGENTS)
+
+    end_time = time.perf_counter()
+    duration = end_time - start_time
+    current_mem, peak_mem = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    # --- End Benchmarking ---
+
+    # --- Print Results ---
+    print("\n" + "="*50)
+    print("      BENCHMARK RESULTS (Centralized DP)")
+    print("="*50)
 
     if solution:
-        print("\n--- Final Solution Summary ---")
-        for agent_id, path in solution.items():
-            print(f"Agent {agent_id} (Start: {AGENTS[agent_id]['start']}, Goal: {AGENTS[agent_id]['goal']}):")
-            print(f"  Cost (Timesteps): {len(path) - 1}")
-
-        # 3. Print the detailed step-by-step path and check for collisions
-        print_solution_details(solution)
-
-        # 4. Animate the solution
-        visualize_solution(solution, AGENTS)
+        solution_cost = sum(len(p) - 1 for p in solution.values())
+        print(f"Solution Found!")
+        print(f"  - Solution Cost (Total Timesteps): {solution_cost}")
+        print(f"  - Execution Time: {duration:.4f} seconds")
+        print(f"  - Peak Memory Usage: {peak_mem / 10**6:.3f} MB")
+        print(f"  - States Processed: {states_processed}")
+        print("="*50 + "\n")
+        
+        # visualize_solution(solution, AGENTS) # You can uncomment this to see the animation
     else:
         print("No solution could be found.")
+        print(f"  - Execution Time: {duration:.4f} seconds")
+        print(f"  - Peak Memory Usage: {peak_mem / 10**6:.3f} MB")
+        print(f"  - States Processed: {states_processed}")
+        print("="*50 + "\n")
