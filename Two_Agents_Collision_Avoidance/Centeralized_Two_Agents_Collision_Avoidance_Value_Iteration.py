@@ -166,8 +166,7 @@ def visualize_solution(solution, agents):
     colors = ["blue", "red"]
     agent_circles = [plt.Circle((0, 0), 0.4, color=colors[i], fill=True) for i in solution]
     goal_crosses = [
-        ax.text(0, 0, "X", va="center", ha="center", color=colors[i], fontsize=20, fontweight="bold")
-        for i in solution
+        ax.text(0, 0, "X", va="center", ha="center", color=colors[i], fontsize=20, fontweight="bold") for i in solution
     ]
     trajectory_lines = [ax.plot([], [], lw=2, color=colors[i])[0] for i in solution]
 
@@ -251,9 +250,9 @@ if __name__ == "__main__":
     # --- End Benchmarking ---
 
     # --- Print Results ---
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("      BENCHMARK RESULTS (Centralized DP)")
-    print("="*50)
+    print("=" * 50)
 
     if solution:
         solution_cost = sum(len(p) - 1 for p in solution.values())
@@ -262,12 +261,12 @@ if __name__ == "__main__":
         print(f"  - Execution Time: {duration:.4f} seconds")
         print(f"  - Peak Memory Usage: {peak_mem / 10**6:.3f} MB")
         print(f"  - States Processed: {states_processed}")
-        print("="*50 + "\n")
-        
+        print("=" * 50 + "\n")
+
         # visualize_solution(solution, AGENTS) # You can uncomment this to see the animation
     else:
         print("No solution could be found.")
         print(f"  - Execution Time: {duration:.4f} seconds")
         print(f"  - Peak Memory Usage: {peak_mem / 10**6:.3f} MB")
         print(f"  - States Processed: {states_processed}")
-        print("="*50 + "\n")
+        print("=" * 50 + "\n")
