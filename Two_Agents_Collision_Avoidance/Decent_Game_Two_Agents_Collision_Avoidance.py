@@ -1,9 +1,10 @@
 import heapq
-from collections import namedtuple
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
 import time
 import tracemalloc
+from collections import namedtuple
+
+import matplotlib.pyplot as plt
+from matplotlib import animation
 
 # --- Global Constants and Definitions ---
 
@@ -12,10 +13,7 @@ MAX_ROWS = 20
 MAX_COLS = 20
 
 # Agent definitions
-AGENTS = {
-    0: {"start": (0, 0), "goal": (19, 19)},
-    1: {"start": (0, 19), "goal": (19, 0)}
-}
+AGENTS = {0: {"start": (0, 0), "goal": (19, 19)}, 1: {"start": (0, 19), "goal": (19, 0)}}
 
 # Static obstacle definition
 OBSTACLE_CENTER = (10, 8)
@@ -28,18 +26,20 @@ Constraint = namedtuple("Constraint", ["loc", "timestep"])
 
 # --- Helper Functions ---
 
+
 def generate_obstacle_set(center, radius):
     """
     Returns a set of (row, col) tuples that are inside the circular obstacle.
     """
     obstacles = set()
-    radius_sq = radius ** 2
+    radius_sq = radius**2
     for r in range(MAX_ROWS):
         for c in range(MAX_COLS):
-            dist_sq = (r - center[0])**2 + (c - center[1])**2
+            dist_sq = (r - center[0]) ** 2 + (c - center[1]) ** 2
             if dist_sq <= radius_sq:
                 obstacles.add((r, c))
     return obstacles
+
 
 def manhattan_distance(loc1, loc2):
     """
@@ -47,6 +47,7 @@ def manhattan_distance(loc1, loc2):
     This is the number of steps a king would take on a chessboard.
     """
     return max(abs(loc1[0] - loc2[0]), abs(loc1[1] - loc2[1]))
+
 
 def reconstruct_path(came_from, current_state):
     """
@@ -62,6 +63,7 @@ def reconstruct_path(came_from, current_state):
 
 
 # --- Core Algorithm Functions ---
+
 
 def a_star_search(start_loc, goal_loc, constraints, obstacles):
     """
@@ -92,7 +94,7 @@ def a_star_search(start_loc, goal_loc, constraints, obstacles):
             # Check grid boundaries
             if not (0 <= next_loc[0] < MAX_ROWS and 0 <= next_loc[1] < MAX_COLS):
                 continue
-            
+
             # Check for collision with static obstacles
             if next_loc in obstacles:
                 continue
@@ -111,6 +113,7 @@ def a_star_search(start_loc, goal_loc, constraints, obstacles):
 
     return None, nodes_expanded
 
+
 def prioritized_planning(agents, obstacles):
     """
     Solves the MAPF problem using a decentralized, prioritized planning approach.
@@ -126,10 +129,7 @@ def prioritized_planning(agents, obstacles):
         print(f"  Current number of constraints: {len(cumulative_constraints)}")
 
         path, nodes_expanded = a_star_search(
-            agents[agent_id]["start"],
-            agents[agent_id]["goal"],
-            cumulative_constraints,
-            obstacles
+            agents[agent_id]["start"], agents[agent_id]["goal"], cumulative_constraints, obstacles
         )
         total_nodes_expanded += nodes_expanded
 
@@ -154,10 +154,12 @@ def prioritized_planning(agents, obstacles):
 
 # --- Visualization and Reporting ---
 
-def print_solution_details(solution, agents):
+
+def print_solution_details(solution):
     """Prints the position of each agent at each timestep."""
     print("\n--- Detailed Path Execution ---")
-    if not solution: return
+    if not solution:
+        return
     max_len = max(len(p) for p in solution.values())
     agent_ids = sorted(solution.keys())
     for t in range(max_len):
@@ -167,6 +169,7 @@ def print_solution_details(solution, agents):
             print(f"  - Agent {agent_ids[i]} at {pos}")
         if len(set(positions)) < len(positions):
             print("  >>> COLLISION DETECTED! <<<")
+
 
 def visualize_solution(solution, agents, obstacles):
     """Animates the solution paths with trajectory trails and obstacles."""
@@ -181,19 +184,21 @@ def visualize_solution(solution, agents, obstacles):
 
     # Draw the static obstacle cells
     for obs_loc in obstacles:
-        rect = plt.Rectangle((obs_loc[1] - 0.5, obs_loc[0] - 0.5), 1, 1, facecolor='gray', alpha=0.6)
+        rect = plt.Rectangle((obs_loc[1] - 0.5, obs_loc[0] - 0.5), 1, 1, facecolor="gray", alpha=0.6)
         ax.add_patch(rect)
-    
+
     colors = ["blue", "red"]
-    agent_circles = [plt.Circle((0, 0), 0.4, color=colors[i], fill=True) for i in solution.keys()]
-    goal_crosses = [ax.text(0, 0, "X", va="center", ha="center", color=colors[i], fontsize=20, fontweight="bold") for i in solution.keys()]
-    trajectory_lines = [ax.plot([], [], lw=2, color=colors[i])[0] for i in solution.keys()]
+    agent_circles = [plt.Circle((0, 0), 0.4, color=colors[i], fill=True) for i in solution]
+    goal_crosses = [
+        ax.text(0, 0, "X", va="center", ha="center", color=colors[i], fontsize=20, fontweight="bold") for i in solution
+    ]
+    trajectory_lines = [ax.plot([], [], lw=2, color=colors[i])[0] for i in solution]
 
     for i, agent_id in enumerate(solution.keys()):
         goal = agents[agent_id]["goal"]
         goal_crosses[i].set_position((goal[1], goal[0]))
         ax.add_patch(agent_circles[i])
-        
+
     max_len = max(len(p) for p in solution.values())
 
     def animate(t):
@@ -208,7 +213,7 @@ def visualize_solution(solution, agents, obstacles):
             trajectory_lines[i].set_data(x_coords, y_coords)
         return agent_circles + trajectory_lines
 
-    ani = animation.FuncAnimation(fig, animate, frames=max_len, interval=250, blit=False, repeat=False)
+    ani = animation.FuncAnimation(fig, animate, frames=max_len, interval=250, blit=False, repeat=False)  # noqa: F841
     plt.show()
 
 
@@ -218,7 +223,7 @@ if __name__ == "__main__":
     # 1. Generate the obstacle set from the defined circle
     obstacle_set = generate_obstacle_set(OBSTACLE_CENTER, OBSTACLE_RADIUS)
     print(f"Generated {len(obstacle_set)} obstacle cells.")
-    
+
     # 2. Start benchmarking
     tracemalloc.start()
     start_time = time.perf_counter()
@@ -232,24 +237,24 @@ if __name__ == "__main__":
     tracemalloc.stop()
 
     # 4. Print results
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("    BENCHMARK RESULTS (Decentralized Prioritized)")
-    print("="*50)
+    print("=" * 50)
 
     if solution:
         solution_cost = sum(len(p) - 1 for p in solution.values())
-        print(f"Solution Found!")
+        print("Solution Found!")
         print(f"  - Solution Cost (Total Timesteps): {solution_cost}")
         print(f"  - Execution Time: {duration:.4f} seconds")
         print(f"  - Peak Memory Usage: {peak_mem / 10**6:.3f} MB")
         print(f"  - States/Nodes Processed: {states_processed}")
-        print("="*50 + "\n")
-        
-        print_solution_details(solution, AGENTS)
+        print("=" * 50 + "\n")
+
+        print_solution_details(solution)
         visualize_solution(solution, AGENTS, obstacle_set)
     else:
         print("No solution could be found.")
         print(f"  - Execution Time: {duration:.4f} seconds")
         print(f"  - Peak Memory Usage: {peak_mem / 10**6:.3f} MB")
         print(f"  - States/Nodes Processed: {states_processed}")
-        print("="*50 + "\n")
+        print("=" * 50 + "\n")

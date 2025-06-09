@@ -189,7 +189,7 @@ def visualize_solution(solution, agents):
             trajectory_lines[i].set_data(x_coords, y_coords)
         return agent_circles + trajectory_lines
 
-    ani = animation.FuncAnimation(fig, animate, frames=max_len, interval=250, blit=False, repeat=False)
+    ani = animation.FuncAnimation(fig, animate, frames=max_len, interval=250, blit=False, repeat=False)  # noqa: F841
     plt.show()
 
 
@@ -256,7 +256,7 @@ if __name__ == "__main__":
 
     if solution:
         solution_cost = sum(len(p) - 1 for p in solution.values())
-        print(f"Solution Found!")
+        print("Solution Found!")
         print(f"  - Solution Cost (Total Timesteps): {solution_cost}")
         print(f"  - Execution Time: {duration:.4f} seconds")
         print(f"  - Peak Memory Usage: {peak_mem / 10**6:.3f} MB")
