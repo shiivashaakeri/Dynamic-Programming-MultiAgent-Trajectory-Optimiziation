@@ -88,7 +88,7 @@ def x_traj_opt(X_traj,trust_region):
                 constraints_s.append(x_traj_t[1] + d_t[1] <= 20)
 
 
-                ## loop through obstacles (test use)
+                # loop through obstacles (test use)
                 S_t = S_i[t]
                 for obs_name in robots_name:
                     X_traj_j = X_traj[obs_name]
@@ -152,6 +152,8 @@ def plot_traj(x_traj):
                 ax.add_patch(circ)
             else:
                 ax.plot(x_traj_t[0], x_traj_t[1], "b.")
+                circ = plt.Circle((x_traj_t[0], x_traj_t[1]), radius=R, color='b', fill=False)
+                ax.add_patch(circ)
         plt.pause(0.01)
     plt.pause(0.1)
     plt.close(fig)
@@ -165,21 +167,24 @@ t_traj = np.linspace(T0, Tf, T)
 dt = t_traj[1] - t_traj[0]
 n = 4  ## number of states
 m = 2  ## number of controls
-trust_region = 1
+trust_region = 0.5
 max_iter = 1000
-N_agents = 2  # Number of agents
-robots_name = ["robot01", "robot02"]
+N_agents = 3  # Number of agents
+robots_name = ["robot01", "robot02","robot03"]
 R = 2.5 # agent radius
 ## Specify the desired states
 x_ini = {}
 x_des = {}
 count = 0
-
 for name in robots_name:
     x_ini[name] = np.array([0, count * 5.1, 0, 0, 0, 0])  ## positions, velocities, and controls (acceleration)
     x_des[name] = np.array([14, (N_agents - count - 1) * 5, 0, 0, 0, 0])
     # x_des[name] = np.array([20, count * 5 , 0, 0, 0, 0])
     count += 1
+# x_ini["robot02"] = np.array([5,3, 0, 0, 0, 0])
+x_des["robot02"] = np.array([14.1,5, 0, 0, 0, 0])
+x_des["robot03"] = np.array([13.5,0, 0, 0, 0, 0])
+# x_des["robot01"] = np.array([10.1,8, 0, 0, 0, 0])
 
 ## get descrete LTI
 [Ad, Bd] = descete_f(dt)
@@ -193,10 +198,9 @@ if __name__ == "__main__":
 
     ## Begin optimization loop
     for iter in range(max_iter):
-        trust_region = trust_region / 2
         print(trust_region)
         X_traj = x_traj_opt(X_traj,trust_region)
         if iter % 1 ==0:
             plot_traj(X_traj)
-
+        trust_region = trust_region / 2
 
