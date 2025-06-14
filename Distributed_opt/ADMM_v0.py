@@ -38,15 +38,15 @@ def x_traj_opt(X_traj,trust_region):
     r_all = {}  ## initialize dual for all agents
     ## Initialize the perturbation variables
     for name in robots_name:
-        r_all[name] = np.ones((T * (n + m),1)) * 0.5
+        r_all[name] = np.ones((T * (n + m),1)) * 10
         s_val[name] = np.zeros((T, n + m))
         s_bar_val[name] = np.zeros((T, n + m))
         s_bar_val_new[name] = np.zeros((T, n + m)) + 1
         diff += LA.norm(s_bar_val[name] - s_bar_val_new[name], 2)
     ## ADMM loop
-    rho = 1000  ## Lagrangian penalty
+    rho = 100000  ## Lagrangian penalty
     # while diff > tol:
-    for iter in range(10):
+    for iter in range(5):
         ##########################################################
         ## solve d - minimization individually (primal variables)
         for name in robots_name:
@@ -82,7 +82,7 @@ def x_traj_opt(X_traj,trust_region):
                 w_t = w_i[t, :]
                 f_t = Ad @ x_traj_t + Bd @ u_traj_t
                 constraints_s.append(x_traj_tp1 + d_tp1 == f_t + Ad @ d_t + Bd @ w_t)
-                constraints_s.append(cp.norm(u_traj_t - w_t, 1) <= trust_region)
+                constraints_s.append(cp.norm(w_t, 1) <= trust_region)
                 # if name == "robot02":
                 #     constraints_s.append(cp.norm(u_traj_t - w_t, 1) <= 0)
                 ## boundary constraints
@@ -204,9 +204,12 @@ def plot_traj(x_traj):
                 circ = plt.Circle((x_traj_t[0], x_traj_t[1]), radius=R, color='g', fill=False)
                 ax.add_patch(circ)
             else:
-                ax.plot(x_traj_t[0], x_traj_t[1], "b.")
+                plt.plot(x_traj_t[0], x_traj_t[1], "b.")
+                circ = plt.Circle((x_traj_t[0], x_traj_t[1]), radius=R, color='b', fill=False)
+                ax.add_patch(circ)
         plt.pause(0.01)
-    plt.show()
+
+    plt.pause(0.1)
     plt.close(fig)
 
 
@@ -218,11 +221,11 @@ t_traj = np.linspace(T0, Tf, T)
 dt = t_traj[1] - t_traj[0]
 n = 4  ## number of states
 m = 2  ## number of controls
-trust_region = 0.2
+trust_region = 0.5
 max_iter = 1000
-N_agents = 2  # Number of agents
-robots_name = ["robot01", "robot02"]
-R = 2 # agent radius
+N_agents = 3  # Number of agents
+robots_name = ["robot01", "robot02","robot03"]
+R = 2.5 # agent radius
 ## Specify the desired states
 x_ini = {}
 x_des = {}
@@ -233,7 +236,8 @@ for name in robots_name:
     # x_des[name] = np.array([20, count * 5 , 0, 0, 0, 0])
     count += 1
 # x_ini["robot02"] = np.array([5,3, 0, 0, 0, 0])
-x_des["robot02"] = np.array([13.5,0, 0, 0, 0, 0])
+x_des["robot02"] = np.array([14.1,5, 0, 0, 0, 0])
+x_des["robot03"] = np.array([13.5,0, 0, 0, 0, 0])
 # x_des["robot01"] = np.array([10.1,8, 0, 0, 0, 0])
 
 ## get descrete LTI
@@ -248,7 +252,7 @@ if __name__ == "__main__":
 
     ## Begin optimization loop
     for iter in range(max_iter):
-        # trust_region = trust_region / 1.1
+        trust_region = trust_region / 2
         print(trust_region)
         X_traj = x_traj_opt(X_traj,trust_region)
         if iter % 1 ==0:
