@@ -38,13 +38,13 @@ def x_traj_opt(X_traj, trust_region):
     r_all = {}  ## initialize dual for all agents
     ## Initialize the perturbation variables
     for name in robots_name:
-        r_all[name] = np.ones((T * 2,1)) * 10
+        r_all[name] = np.ones((T * 2,1)) * 0
         s_val[name] = np.zeros((T, n + m))
         s_bar_val[name] = np.zeros((T, 2))
         s_bar_val_new[name] = np.zeros((T, 2)) + 1
         diff += LA.norm(s_bar_val[name] - s_bar_val_new[name], 2)
     ## ADMM loop
-    rho = 100000  ## Lagrangian penalty
+    rho = 100  ## Lagrangian penalty
     # while diff > tol:
     for iter in range(5):
         ##########################################################
@@ -58,9 +58,8 @@ def x_traj_opt(X_traj, trust_region):
             u_traj_i = X_traj_i[0:T - 1, n:n + m]  # extract the control
             # Primary variables
             s_i = cp.Variable((T, n + m))
-            S_i = cp.Variable(T)
             d_i = s_i[0:T, 0:n]
-            x_i = d_i[:, 0:2]  ## only position
+            x_i = s_i[:, 0:2]  ## only position
             s_i_vec = cp.reshape(x_i, (T * 2, 1), order="C")  ## vectorized primal variables
             w_i = s_i[0:T - 1, n:n + m]
             # Duplicate variables
@@ -69,8 +68,8 @@ def x_traj_opt(X_traj, trust_region):
             ##########################################################
             ## s - minimization (primal variables)
             # Construct the augmented Lagrangian
-            L_rho = 1 * cp.sum_squares(u_traj_i + w_i) + 1 * r_i.T @ (s_i_vec - s_bar_val_i_vec) + rho / 2 * cp.square(
-                cp.norm(s_i_vec - s_bar_val_i_vec, 2))
+            L_rho = 1 * cp.sum_squares(u_traj_i + w_i) + rho / 2 * cp.square(
+                cp.norm(s_i_vec - s_bar_val_i_vec+r_i, 2))
             # L_rho = 1*cp.sum_squares(u_traj_i + w_i) + 10000 * cp.norm(S_i,2)
             constraints_s = [d_i[0, :] == np.zeros(n)]
             constraints_s.append(d_i[T - 1, :] + x_traj_i[T - 1, :] == x_des_i)
@@ -114,8 +113,8 @@ def x_traj_opt(X_traj, trust_region):
             s_bar_i_vec = cp.reshape(s_bar_i, (T * 2, 1), order="C")  ## vectorized duplicated variables
             r_i = r_all[name]
             S_i = S[name]
-            L_rho_bar += 1 * r_i.T @ (s_val_i_vec - s_bar_i_vec) + rho / 2 * cp.square(
-                cp.norm(s_val_i_vec - s_bar_i_vec, 2)) + 1000000 * cp.norm(S_i, 1)
+            L_rho_bar += rho / 2 * cp.square(
+                cp.norm(s_val_i_vec - s_bar_i_vec+r_i, 2)) + 1000000 * cp.norm(S_i, 1)
         constraints_bar = []
         for t in range(T):
             for name in robots_name:
@@ -135,7 +134,7 @@ def x_traj_opt(X_traj, trust_region):
                         S_fun = 2 * R - LA.norm(x_traj_i_t[0:2] - x_traj_j_t[0:2], 2)
                         S_grad = (x_traj_i_t[0:2] - x_traj_j_t[0:2]).T / cp.norm(x_traj_i_t[0:2] - x_traj_j_t[0:2], 2)
                         constraints_bar.append(
-                            S_fun - S_grad @ d_bar_i_t[0:2] <= S_i_t
+                            S_fun - S_grad @ d_bar_i_t[0:2] <= 0*S_i_t
                         )
                         constraints_bar.append(S_i_t >= 0)
         problem = cp.Problem(cp.Minimize(L_rho_bar), constraints_bar)
@@ -150,15 +149,15 @@ def x_traj_opt(X_traj, trust_region):
             r_i = r_all[name]
             s_val_i = s_val[name][:,0:2]
             s_val_i_vec = np.reshape(s_val_i, (T * 2, 1), order="C")  ## vectorized primal variables
-            s_bar_val_i = s_bar_val[name][:,0:2]
+            s_bar_val_i = s_bar[name].value[:,0:2]
             s_bar_val_i_vec = np.reshape(s_bar_val_i, (T * 2, 1), order="C")  ## vectorized duplicated variables
-            r_i += rho * (s_val_i_vec - s_bar_val_i_vec)
+            r_i +=  (s_val_i_vec - s_bar_val_i_vec)
             r_all[name] = r_i  ## Update the dual variables
 
         ## Find the difference
         diff = 0
         for name in robots_name:
-            diff += LA.norm(s_bar_val[name] - s_val[name][:,0:2], 2)
+            diff += LA.norm(s_bar[name].value - s_val[name][:,0:2], 2)
         print("Difference:  ", diff)
         ## replace the current s_bar with s_bar_new
         for name in robots_name:
