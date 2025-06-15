@@ -149,7 +149,7 @@ def x_traj_opt(X_traj, trust_region):
             r_i = r_all[name]
             s_val_i = s_val[name][:,0:2]
             s_val_i_vec = np.reshape(s_val_i, (T * 2, 1), order="C")  ## vectorized primal variables
-            s_bar_val_i = s_bar_val[name][:,0:2]
+            s_bar_val_i = s_bar[name].value[:,0:2]
             s_bar_val_i_vec = np.reshape(s_bar_val_i, (T * 2, 1), order="C")  ## vectorized duplicated variables
             r_i += rho * (s_val_i_vec - s_bar_val_i_vec)
             r_all[name] = r_i  ## Update the dual variables
@@ -157,7 +157,7 @@ def x_traj_opt(X_traj, trust_region):
         ## Find the difference
         diff = 0
         for name in robots_name:
-            diff += LA.norm(s_bar_val[name] - s_val[name][:,0:2], 2)
+            diff += LA.norm(s_bar[name].value - s_val[name][:,0:2], 2)
         print("Difference:  ", diff)
         ## replace the current s_bar with s_bar_new
         for name in robots_name:
