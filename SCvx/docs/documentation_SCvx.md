@@ -295,7 +295,7 @@ It includes:
 - State: $x = [x, y, \theta]$
 - Input: $u = [v, \omega]$
 - $\texttt{dynamics(x, u)}$: returns $\dot{x}$
-- $\texttt{get\_cost\_function(...)}$: returns the convexified trajectory cost
+- get_cost_function(...): returns the convexified trajectory cost
 
 ### 6.1.2 FirstOrderHold
 
