@@ -1,3 +1,5 @@
+import os
+
 import matplotlib.pyplot as plt
 
 from SCvx.models.unicycle_model import UnicycleModel
@@ -22,11 +24,14 @@ def main():
     plt.show()
 
     # Plot convergence metrics — use logger.records here
-    ax2 = plot_convergence(logger.records) # noqa: F841
+    ax2 = plot_convergence(logger.records)  # noqa: F841
     plt.show()
 
+    # Define the path to save the animation
+    save_path = os.path.join("SCvx", "docs", "img", "trajectory_animation.gif")
     # Optionally animate trajectory
-    anim = animate_trajectory(X, model, interval=200) # noqa: F841
+    anim = animate_trajectory(X, model, interval=200)
+    anim.save(save_path, writer="pillow", fps=5)  # Save as GIF using Pillow writer
     plt.show()
 
 
