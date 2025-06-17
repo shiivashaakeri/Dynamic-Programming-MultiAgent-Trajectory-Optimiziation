@@ -336,6 +336,26 @@ This design enables rapid tuning of model behavior or optimization heuristics.
 
 This section presents the performance of the SCvx solver applied to the unicycle model. The results include convergence behavior, the resulting optimal trajectory, and a visual animation of the agent’s motion.
 
+# 7.0 Global SCvx Parameters
+
+The following parameters control the behavior of the SCvx algorithm:
+
+| Parameter        | Description                                                               | Symbol              | Value     |
+|------------------|---------------------------------------------------------------------------|---------------------|-----------|
+| `K`              | Number of discretization points (time steps)                              | $K$                 | 50        |
+| `MAX_ITER`       | Maximum number of SCvx iterations                                          | —                   | 20        |
+| `TRUST_RADIUS0`  | Initial trust region radius                                                | $\Delta_0$          | 20.0      |
+| `CONV_TOL`       | Convergence threshold (Frobenius norm of state change)                     | $\epsilon_{\text{conv}}$ | 1e-3     |
+| `WEIGHT_NU`      | Penalty weight for dynamics defect variables                               | $w_\nu$             | 1e3       |
+| `WEIGHT_SLACK`   | Penalty weight for slack variables in soft constraints                     | $w_s$               | 1e6       |
+| `WEIGHT_SIGMA`   | Penalty weight on time-scaling variable $\sigma$                          | $w_\sigma$          | 1.0       |
+
+These appear in the cost function as:
+
+```math
+J = \sum_{k=0}^{K-1} \text{cost}(x_k, u_k) + w_\nu \|\nu_k\|^2 + w_s \|s_k\|_1 + w_\sigma (\sigma - \sigma_{\text{ref}})^2
+```
+
 # 7.1 Convergence Plots
 
 The figure below shows the evolution of key optimization metrics across SCvx iterations, including the trust-region radius, primal residuals, and cost changes.
