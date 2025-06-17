@@ -34,9 +34,7 @@ class NashSolver:
         self.tol = tol
 
         # per-agent objects
-        self.br_solvers: List[AgentBestResponse] = [
-            AgentBestResponse(i, multi_agent_model) for i in range(self.N)
-        ]
+        self.br_solvers: List[AgentBestResponse] = [AgentBestResponse(i, multi_agent_model) for i in range(self.N)]
         self.fohs = [FirstOrderHold(m, K) for m in multi_agent_model.models]
 
     # ------------------------------------------------------------------
@@ -64,38 +62,41 @@ class NashSolver:
             if verbose:
                 print(f"\n--- Outer iteration {it} ---")
 
+            # Store previous trajectories (used for linearization)
+            X_prev_all = [x.copy() for x in X_curr]
+
             # ------------------------------------------------ agent sweep
             for i, br in enumerate(self.br_solvers):
-                # 1) linearise dynamics around current trajectory
-                mats = self.fohs[i].calculate_discretization(
-                    X_curr[i], U_curr[i], sigma_ref
-                )
+                # 1) linearize dynamics around current trajectory
+                mats = self.fohs[i].calculate_discretization(X_curr[i], U_curr[i], sigma_ref)
 
-                # 2) neighbours stay fixed
+                # 2) Neighbors' current and previous trajectories
                 neighbour_refs = {j: X_curr[j] for j in range(self.N) if j != i}
+                neighbour_prev_refs = {j: X_prev_all[j] for j in range(self.N) if j != i}
+                X_prev_i = X_prev_all[i]
 
-                # 3) set up & solve best-response problem
+                # 3) Set up and solve best-response problem
                 br.setup(
                     X_ref=X_curr[i],
                     U_ref=U_curr[i],
                     sigma_ref=sigma_ref,
                     discr_mats=mats,
                     neighbour_refs=neighbour_refs,
+                    X_prev=X_prev_i,
+                    neighbour_prev_refs=neighbour_prev_refs,
                     tr_radius=TRUST_RADIUS0,
                 )
                 X_new, U_new, *_ = br.solve()
 
-                # 4) measure change and print cost
+                # 4) Measure change and print cost
                 delta = np.linalg.norm(X_new - X_curr[i])
                 max_change = max(max_change, delta)
                 cost_i = br.scp.prob.value
 
                 if verbose:
-                    print(
-                        f"  Agent {i}:  cost={cost_i:8.3f}   ΔX={delta:6.2e}"
-                    )
+                    print(f"  Agent {i}:  cost={cost_i:8.3f}   ΔX={delta:6.2e}")
 
-                # 5) update trajectories
+                # 5) Update trajectories
                 X_curr[i], U_curr[i] = X_new, U_new
 
             # ------------------------------------------------ iteration log
@@ -113,7 +114,6 @@ class NashSolver:
                     tr_radius=0.0,
                 )
 
-            # convergence test
             if max_change < self.tol:
                 if verbose:
                     print("Converged.")
