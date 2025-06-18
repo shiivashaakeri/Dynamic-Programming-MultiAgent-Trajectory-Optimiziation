@@ -16,7 +16,7 @@ OBSTACLES = [
 ]
 
 # ---------- Game-specific cost weights ----------
-CTRL_W = 100.0  # effort term
+CTRL_W = 5  # effort term
 COLL_W = 10.0  # weight on slack variables
 COLL_RAD = 0.5  # d_min inside model cost
 

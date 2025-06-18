@@ -409,3 +409,46 @@ The table below summarizes the agent settings:
   <br/>
   <em>Figure 7.3: Animated agent motions through obstacle-laden workspace, generated from the final SCvx solution trajectories.</em>
 </p>
+
+## 8. Comparison
+
+### Summary Table
+
+| Method | Iter | Time (s)  | Min-sep (m) | Effort   | Length  | CtrlSmooth | CurvSmooth | SlackSum |
+|:-------|-----:|----------:|------------:|---------:|--------:|-----------:|-----------:|---------:|
+| ADMM   |   20 |    26.4579 |      0.5000 |   91.0586 |   9.5391 |     6.4686 |     0.0059 |     0.0 |
+| NASH   |    6 |     7.5691 |      0.5665 |    2.9906 |   9.6735 |     0.0940 |     0.0000 |     0.0 |
+
+---
+
+### Convergence Profiles
+
+<p align="center">
+  <img src="img/compare_admm_nash_convergence.png" width="500"/>
+  <br/>
+  <em>Figure 8.1: Convergence profiles—ADMM primal/dual residuals vs. iteration and Nash ‖ΔX‖ vs. iteration.</em>
+</p>
+
+### Control Effort & Path Length
+
+<p align="center">
+  <img src="img/compare_admm_nash_control_pathlength.png" width="500"/>
+  <br/>
+  <em>Figure 8.2: Total control effort and path length for ADMM vs. Nash.</em>
+</p>
+
+### Trajectory Comparison
+
+<p align="center">
+  <img src="img/compare_admm_nash_trajectories.png" width="500"/>
+  <br/>
+  <em>Figure 8.3: Overlaid agent trajectories (solid = Nash, dashed = ADMM; same color per agent).</em>
+</p>
+
+### Inter‐Agent Separation Over Time
+
+<p align="center">
+  <img src="img/compare_admm_game_interseperation.png" width="500"/>
+  <br/>
+  <em>Figure 8.4: Minimum inter‐agent distance d<sub>min</sub>(k) vs. timestep for ADMM and Nash.</em>
+</p>

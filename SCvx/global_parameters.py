@@ -13,6 +13,6 @@ TRUST_RADIUS0 = 20.0
 CONV_TOL = 1e-3
 
 # Weights for defect and slack variables
-WEIGHT_NU = 1e3
+WEIGHT_NU = 1e4
 WEIGHT_SLACK = 1e6
-WEIGHT_SIGMA = 1.0
+WEIGHT_SIGMA = 100.0

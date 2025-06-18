@@ -1,10 +1,3 @@
-"""Iterative Best-Response (Nash) coordinator.
-
-Each outer iteration sweeps through agents 0..N-1, letting each one solve
-its *best response* while treating the others' trajectories as fixed.
-Stops when the maximum state change falls below `tol` (Frobenius norm).
-"""
-
 from __future__ import annotations
 
 import time
@@ -20,7 +13,7 @@ from SCvx.utils.reporting import print_iteration, print_summary
 
 
 class NashSolver:
-    """Coordinator for non-cooperative Nash equilibrium via Iterative Best Response."""
+    """Non-cooperative Nash via Iterative Best Response (no time-term)."""
 
     def __init__(
         self,
@@ -33,11 +26,9 @@ class NashSolver:
         self.max_iter = max_iter
         self.tol = tol
 
-        # per-agent objects
-        self.br_solvers: List[AgentBestResponse] = [AgentBestResponse(i, multi_agent_model) for i in range(self.N)]
+        self.br_solvers = [AgentBestResponse(i, multi_agent_model) for i in range(self.N)]
         self.fohs = [FirstOrderHold(m, K) for m in multi_agent_model.models]
 
-    # ------------------------------------------------------------------
     def solve(
         self,
         X_refs: List[np.ndarray],
@@ -45,61 +36,44 @@ class NashSolver:
         sigma_ref: float = 1.0,
         verbose: bool = False,
     ) -> Tuple[List[np.ndarray], List[np.ndarray], List[float]]:
-        """Run Iterative Best Response until convergence (Nash equilibrium).
-
-        Returns
-        -------
-        X_list, U_list : final trajectories for all agents
-        hist           : list of max ΔX per outer iteration
-        """
         X_curr = [x.copy() for x in X_refs]
         U_curr = [u.copy() for u in U_refs]
         change_hist: List[float] = []
-
         t0 = time.time()
+
         for it in range(self.max_iter):
             max_change = 0.0
             if verbose:
                 print(f"\n--- Outer iteration {it} ---")
 
-            # Store previous trajectories (used for linearization)
             X_prev_all = [x.copy() for x in X_curr]
 
-            # ------------------------------------------------ agent sweep
             for i, br in enumerate(self.br_solvers):
-                # 1) linearize dynamics around current trajectory
                 mats = self.fohs[i].calculate_discretization(X_curr[i], U_curr[i], sigma_ref)
-
-                # 2) Neighbors' current and previous trajectories
-                neighbour_refs = {j: X_curr[j] for j in range(self.N) if j != i}
-                neighbour_prev_refs = {j: X_prev_all[j] for j in range(self.N) if j != i}
+                neigh_cur = {j: X_curr[j] for j in range(self.N) if j != i}
+                neigh_prev = {j: X_prev_all[j] for j in range(self.N) if j != i}
                 X_prev_i = X_prev_all[i]
 
-                # 3) Set up and solve best-response problem
                 br.setup(
                     X_ref=X_curr[i],
                     U_ref=U_curr[i],
                     sigma_ref=sigma_ref,
                     discr_mats=mats,
-                    neighbour_refs=neighbour_refs,
+                    neighbour_refs=neigh_cur,
                     X_prev=X_prev_i,
-                    neighbour_prev_refs=neighbour_prev_refs,
+                    neighbour_prev_refs=neigh_prev,
                     tr_radius=TRUST_RADIUS0,
                 )
                 X_new, U_new, *_ = br.solve()
 
-                # 4) Measure change and print cost
                 delta = np.linalg.norm(X_new - X_curr[i])
                 max_change = max(max_change, delta)
                 cost_i = br.scp.prob.value
-
                 if verbose:
                     print(f"  Agent {i}:  cost={cost_i:8.3f}   ΔX={delta:6.2e}")
 
-                # 5) Update trajectories
                 X_curr[i], U_curr[i] = X_new, U_new
 
-            # ------------------------------------------------ iteration log
             change_hist.append(max_change)
             if verbose:
                 print_iteration(
@@ -113,7 +87,6 @@ class NashSolver:
                     sigma=sigma_ref,
                     tr_radius=0.0,
                 )
-
             if max_change < self.tol:
                 if verbose:
                     print("Converged.")

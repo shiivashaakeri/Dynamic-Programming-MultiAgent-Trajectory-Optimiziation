@@ -1,10 +1,3 @@
-"""Best-response wrapper around SCvx for Nash games.
-
-Each agent solves its own optimal-control problem (via SCProblem/SCvx)
-while treating other agents' position trajectories as **fixed** parameters
-- this is exactly an Iterative Best Response step toward a Nash equilibrium.
-"""
-
 from __future__ import annotations
 
 from typing import Dict, Tuple
@@ -20,34 +13,25 @@ from SCvx.optimization.sc_problem import SCProblem
 
 
 class AgentBestResponse:
-    """Solve one agent's best-response problem given others' trajectories."""
+    """Solve one agent's best-response (pure Nash, fixed time-scale)."""
 
     def __init__(
         self,
         i: int,
         multi_agent_model: MultiAgentModel,
-        rho_admm: float = 1.0,  # not used here but kept for consistency  # noqa: ARG002
     ):
         self.i = i
-        self.N = multi_agent_model.N
         self.multi_model = multi_agent_model
-
-        # This agent's own GameUnicycleModel
-        self.model: GameUnicycleModel = multi_agent_model.models[i]  # type: ignore
-
-        # Discretizer for this agent
+        self.model: GameUnicycleModel = multi_agent_model.models[i]
         self.foh = FirstOrderHold(self.model, K)
 
-        # 2.K parameters for neighbours' positions
-        self.Y_params: Dict[int, cvx.Parameter] = {j: cvx.Parameter((2, K)) for j in range(self.N) if j != i}
-
-        # Own previous state trajectory
+        # neighbour position parameters
+        self.Y_params: Dict[int, cvx.Parameter] = {
+            j: cvx.Parameter((2, K)) for j in range(self.multi_model.N) if j != i
+        }
         self.X_prev_param = cvx.Parameter((3, K))
-
-        # Placeholder for SCProblem
         self.scp: SCProblem | None = None
 
-    # ------------------------------------------------------------------
     def setup(
         self,
         X_ref: np.ndarray,
@@ -59,19 +43,20 @@ class AgentBestResponse:
         neighbour_prev_refs: Dict[int, np.ndarray],
         tr_radius: float = TRUST_RADIUS0,
     ) -> None:
-        """Prepare CVXPY problem for the best-response step."""
-        # Initialize SCProblem
+        """Build & parameterize the convex best-response problem with o fixed."""
+        # 1) build fresh SCProblem
         self.scp = SCProblem(self.model)
 
-        # Set trajectory parameters
+        # 2) set previous-trajectory parameters
         self.X_prev_param.value = X_prev
-        for j, param in self.Y_params.items():
-            param.value = neighbour_refs[j][0:2, :]
+        for j, P in self.Y_params.items():
+            P.value = neighbour_refs[j][0:2, :]
 
-        # Prepare previous neighbor positions for constraint linearization
-        neighbour_prev_pos = [neighbour_prev_refs[j][0:2, :] for j in self.Y_params]
+        neighbour_prev_pos = [
+            neighbour_prev_refs[j][0:2, :] for j in self.Y_params
+        ]
 
-        # Build extra cost & hard constraints
+        # 3) build the extra cost (control + smooth + inertia + collision)
         extra_cost = self.model.get_cost_function(
             X_v=self.scp.var["X"],
             U_v=self.scp.var["U"],
@@ -80,13 +65,19 @@ class AgentBestResponse:
             neighbour_prev_pos=neighbour_prev_pos,
         )
 
-        # Build final objective and constraints
+        # 4) replace objective, append any linearized-collision constraints
         base_obj = self.scp.prob.objective.args[0]
+        all_cons = list(self.scp.prob.constraints) + self.model.extra_constraints
+
+        # 5) pin o to the reference
+        all_cons.append(self.scp.var["sigma"] == sigma_ref)
+        # 6) rebuild the Problem
         self.scp.prob = cvx.Problem(
-            cvx.Minimize(base_obj + extra_cost), self.scp.prob.constraints + self.model.extra_constraints
+            cvx.Minimize(base_obj + extra_cost),
+            all_cons,
         )
 
-        # Set dynamics and trust-region parameters
+        # 7) set dynamics & trust-region parameters
         A_bar, B_bar, C_bar, S_bar, z_bar = discr_mats
         self.scp.set_parameters(
             A_bar=A_bar,
@@ -103,12 +94,9 @@ class AgentBestResponse:
             tr_radius=tr_radius,
         )
 
-    # ------------------------------------------------------------------
     def solve(self, solver: str = "ECOS", **solver_kwargs):
-        """Solve the best-response SCvx problem and return updated trajectories."""
         if self.scp is None:
             raise RuntimeError("call setup() before solve()")
-
         err = self.scp.solve(solver=solver, warm_start=True, **solver_kwargs)
         if err:
             raise RuntimeError("SCProblem error inside AgentBestResponse")
@@ -116,7 +104,7 @@ class AgentBestResponse:
         X_i = self.scp.get_variable("X")
         U_i = self.scp.get_variable("U")
         nu_i = self.scp.get_variable("nu")
-        sigma_i = self.scp.get_variable("sigma")  # should equal sigma_ref  # noqa: F841
+
         p_i = X_i[0:2, :]
-        slack_i = self.model.get_linear_cost() if hasattr(self.model, "get_linear_cost") else 0.0
+        slack_i = getattr(self.model, "get_linear_cost", lambda: 0.0)()
         return X_i, U_i, nu_i, slack_i, p_i
