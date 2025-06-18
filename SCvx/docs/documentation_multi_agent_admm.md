@@ -169,12 +169,12 @@ This enables parallelized and scalable optimization.
 
 At each time step $k$, we require that the position of agent $i$ and $j$ satisfies:
 ```math
-\|\mathbf{p}_i(k) - \mathbf{p}_j(k)\|2 \geq d{\min}
+\|\mathbf{p}_i(k) - \mathbf{p}_j(k)\|_2 \geq d{\min}
 \quad \text{for all } i \ne j
 ```
 To preserve convexity, we linearize this constraint at reference trajectories $\mathbf{p}_i^{\text{ref}}(k)$ and $\mathbf{p}_j^{\text{ref}}(k)$. Let:
 ```math
-\mathbf{a}{ij}(k) = \frac{\mathbf{p}_i^{\text{ref}}(k) - \mathbf{p}_j^{\text{ref}}(k)}{\|\mathbf{p}_i^{\text{ref}}(k) - \mathbf{p}_j^{\text{ref}}(k)\|2 + \epsilon}
+\mathbf{a}{ij}(k) = \frac{\mathbf{p}_i^{\text{ref}}(k) - \mathbf{p}_j^{\text{ref}}(k)}{\|\mathbf{p}_i^{\text{ref}}(k) - \mathbf{p}_j^{\text{ref}}(k)\|_2 + \epsilon}
 ```
 
 Then the linearized constraint becomes:
