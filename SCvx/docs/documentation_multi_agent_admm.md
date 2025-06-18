@@ -213,7 +213,7 @@ This enables solving the multi-agent problem in parallel, while maintaining coor
 
 ## 4.2 Consensus Variables and Dual Updates
 
-Let $\mathbf{p}_i(k) \in \mathbb{R}^2$ be the position of agent $i$ at time $k$. Each agent maintains estimates $\mathbf{Y}_{ij}(k)$ of its neighbors’ positions $\mathbf{p}_j(k)$.
+Let ${p}_i(k) \in {R}^2$ be the position of agent $i$ at time $k$. Each agent maintains estimates ${Y}_{ij}(k)$ of its neighbors’ positions ${p}_j(k)$.
 
 ### Consensus enforcement:
 
