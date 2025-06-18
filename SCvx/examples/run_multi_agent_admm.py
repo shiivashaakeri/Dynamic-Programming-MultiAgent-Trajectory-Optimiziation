@@ -1,3 +1,5 @@
+import os
+
 import matplotlib.pyplot as plt
 
 from SCvx.config.default_scenario import AGENT_PARAMS, CLEARANCE, D_MIN, K
@@ -46,9 +48,10 @@ def main():
     fig2, ax2 = plt.subplots()
     plot_admm_convergence(pr_hist, du_hist, ax=ax2)
     plt.show()
-
+    save_path = os.path.join("SCvx", "docs", "img", "multi_trajectory_animation.gif")
     # Animate all agents together with obstacles
-    anim = animate_multi_agents(X_list, mam.models, interval=200)  # noqa: F841
+    anim = animate_multi_agents(X_list, mam.models, interval=200)
+    anim.save(save_path, writer="pillow", fps=5)  # Save as GIF using Pillow writer
     plt.show()
 
 
