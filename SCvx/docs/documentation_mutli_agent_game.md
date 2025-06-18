@@ -179,7 +179,9 @@ $d_{ij}^{(k)} = p_i^{\text{prev}}(k) - p_j^{\text{prev}}(k)$
 \hat{n}_{ij}^{(k)} = \frac{d_{ij}^{(k)}}{\| d_{ij}^{(k)} \|}
 ```
 3. Linearized constraint:
-$\hat{n}_{ij}^{(k)\top} \left( p_i(k) - p_j(k) \right) \ge d_{\text{min}}^i$
+```math
+\hat{n}_{ij}^{(k)\top} \left( p_i(k) - p_j(k) \right) \ge d_{\text{min}}^i
+```
 
 This enforces a convexified buffer zone around each agent at every timestep, maintaining distance without introducing non-convex constraints.
 
@@ -197,4 +199,213 @@ Each agent solves the following constrained optimization problem:
 \end{aligned}
 ```
 
-where f_d denotes the discretized unicycle dynamics. The linearized constraints depend on the neighbors’ previous trajectories, yielding a best-response structure.
+where $f_d$ denotes the discretized unicycle dynamics. The linearized constraints depend on the neighbors’ previous trajectories, yielding a best-response structure.
+
+# 4. Nash Optimization Algorithm
+
+This section formalizes the algorithmic structure used to compute a Nash equilibrium in a multi-agent trajectory optimization problem using iterative best-response dynamics.
+
+## 4.1 Iterative Best Response (IBR)
+
+In a non-cooperative game, each agent seeks to minimize its own objective function assuming the strategies (trajectories) of other agents are fixed.
+
+Let $\mathcal{X} = (X_1, \dots, X_N)$ denote the joint state trajectories and $\mathcal{U} = (U_1, \dots, U_N)$ the joint control trajectories of all agents. A Nash equilibrium satisfies:
+
+```math
+(X_i^*, U_i^*) = \arg\min_{X_i, U_i} \; J_i(X_i, U_i; X_{-i}^*, U_{-i}^*) \quad \forall i \in \{1, \dots, N\}
+```
+
+The Iterative Best Response (IBR) algorithm approximates the Nash equilibrium via a fixed-point iteration. At iteration $t$, each agent solves:
+
+```math
+(X_i^{(t)}, U_i^{(t)}) = \arg\min_{X_i, U_i} \; J_i(X_i, U_i; X_{-i}^{(t-1)})
+```
+
+The algorithm proceeds by updating each agent sequentially or in parallel, using the most recent trajectory information of the others.
+
+## 4.2 AgentBestResponse: Local Convex Subproblem
+
+Each best-response problem is formulated using Successive Convexification (SCvx), where the agent solves a convex approximation of its nonlinear trajectory optimization problem.
+
+For agent $i$, given:
+- previous iterate $X_i^{\text{prev}}, U_i^{\text{prev}}$,
+- linearization of its dynamics $f_d$,
+- neighbor trajectories $\{X_j^{\text{prev}} \}_{j \ne i}$,
+
+the local convex program becomes:
+
+```math
+\begin{aligned}
+\min_{X_i, U_i} \quad & J_i^{\text{convex}}(X_i, U_i; X_{-i}^{\text{prev}}) \\
+\text{s.t.} \quad
+& \text{Discretized linear dynamics: } A_i X_i + B_i U_i = z_i \\
+& \text{Linearized collision constraints: } \hat{n}_{ij}^\top(p_i - p_j^{\text{prev}}) \ge d{\min} \\
+& \text{Trust region constraints: } \| X_i - X_i^{\text{prev}} \|_F \le \delta_i
+\end{aligned}
+```
+
+Here, $A_i, B_i$ are discretized dynamics matrices, and $\delta_i$ is a trust-region radius.
+
+
+## 4.3 NashSolver: Outer Loop Coordination
+
+The outer loop coordinates all agents by sweeping through them one-by-one, letting each solve its best-response problem while holding the others fixed. The full algorithm is as follows:
+
+⸻
+
+Iterative Best-Response Algorithm:
+1. Initialize $X_i^{(0)}, U_i^{(0)}$ for all $i$
+2. For iteration $t = 1, 2, \dots$:
+    - For each agent $i = 1, \dots, N$:
+        ```math
+        (X_i^{(t)}, U_i^{(t)}) \leftarrow \arg\min_{X_i, U_i} J_i(X_i, U_i; X_{-i}^{(t-1)})
+        ```
+    - Compute total state change:
+        ```math
+        \Delta^{(t)} = \max_i \| X_i^{(t)} - X_i^{(t-1)} \|_F
+        ```
+    - If $\Delta^{(t)} < \texttt{tol}$, terminate
+
+## 4.4 Convergence Criterion (‖ΔX‖ < tol)
+
+The algorithm halts when the maximum state change between iterations is sufficiently small:
+
+$$\Delta^{(t)} := \max_i \| X_i^{(t)} - X_i^{(t-1)} \|_F < \varepsilon$$
+
+This reflects convergence to a fixed point in trajectory space, i.e., a Nash equilibrium where no agent has incentive to deviate given others’ strategies.
+
+# 5. Code Architecture
+
+This section explains how the theoretical components of the Nash-game-based multi-agent trajectory optimization are implemented in code. The system is designed with modularity and clarity in mind, allowing each agent to solve its own optimal control problem while interacting with others through shared state trajectories.
+
+⸻
+
+## 5.1 Overview
+
+The implementation is structured around three core classes, each corresponding to a key theoretical element:
+- $\texttt{GameUnicycleModel}$: encapsulates agent-specific dynamics and cost structure.
+- $\texttt{AgentBestResponse}$: builds and solves the convex best-response problem for a single agent.
+- $\texttt{NashSolver}$: orchestrates the iterative optimization loop across all agents.
+
+⸻
+
+### 5.1.1 $\texttt{GameUnicycleModel}$
+- Extends a base unicycle model by adding agent-specific cost weights (e.g., control effort, curvature, collision avoidance).
+- Implements *get_cost_function()*, which generates a CVXPY expression equivalent to the convexified cost:
+```math
+J_i^{\text{convex}} = w_u \| U_i \|^2 + w_{\dot{u}} \| \Delta U_i \|^2 + w_{\theta} \| \Delta \theta_i \|^2 + \text{(collision constraints)} + \text{(inertia)}
+```
+- Also generates linearized collision constraints with respect to neighbors using directional derivatives.
+
+⸻
+
+### 5.1.2 AgentBestResponse
+- Represents an individual agent’s best-response solver.
+- At each outer iteration:
+    - Accepts neighbor trajectories$ $\{X_j^{\text{prev}}\}_{j \ne i}$ as parameters.
+    - Injects dynamics linearization matrices $(A_i, B_i, \dots)$, reference trajectories $(X_i^{\text{ref}}, U_i^{\text{ref}})$, and trust region radius.
+    - Constructs a convex optimization problem using CVXPY, matching the form in Section 4.2:
+    ```math
+    \min \; \text{SCvx}(X_i, U_i) + J_i^{\text{convex}}(X_i, U_i; X_{-i})
+    ```
+- On solve, returns updated trajectories $X_i, U_i$ and slack variables.
+
+⸻
+
+### 5.1.3 NashSolver
+- Implements the Iterative Best Response (IBR) loop from Section 4.
+- Holds a list of AgentBestResponse solvers, one per agent.
+- For each outer iteration:
+    - Linearizes dynamics for each agent based on its current trajectory.
+    - Calls AgentBestResponse.setup() to build each convex subproblem.
+    - Solves each agent’s problem sequentially.
+    - Monitors change in trajectories $\|X_i^{(t)} - X_i^{(t-1)}\|$ and halts when convergence is achieved.
+
+⸻
+
+## 5.2 Parameter Injection and Problem Setup
+
+All CVXPY variables and parameters are created once and reused across iterations for efficiency. The typical data flow per agent is:
+1.	Trajectory Guess: From warm start (e.g., straight-line initialization).
+
+2.	Dynamics Linearization: Via FirstOrderHold.
+
+3.	Parameter Injection:
+    - $X_i^{\text{prev}}$ for trust region and inertia.
+    - $X_j^{\text{prev}}$ for linearized inter-agent constraints.
+4.	Problem Construction: Cost and constraints are composed in get_cost_function() and added to the SCvx base problem.
+5.	Solve: A single agent’s updated result is returned and inserted into the global trajectory list.
+
+⸻
+
+## 5.3 Reusability: Wrapping Around SCvx
+
+The entire Nash game formulation wraps around an existing SCvx optimizer, reused as the backbone for each agent’s problem. This promotes:
+- Code reuse: all trajectory, trust-region, and slack-handling mechanisms are inherited from SCvx.
+- Consistency: ensures each agent’s local optimization aligns with a unified mathematical structure.
+- Extensibility: allows future extension to include soft collisions, time-varying dynamics, or cooperative variants.
+
+## 7. Experimental Results
+
+This section presents the setup and outcomes of a Nash-game-based trajectory optimization involving three non-cooperative agents in a shared workspace with static obstacles. Each agent solves a convexified local problem using SCvx, coordinated through an iterative best-response loop.
+
+---
+
+### 7.1 Agent Definitions (Init/Goal, Weights)
+
+The table below summarizes the agent settings:
+
+| Agent | Initial State (x, y, θ) | Final State (x, y, θ) | Control Weight \($w_u$\) | Collision Weight \($w_{\text{coll}}$\) | Radius \($r_{\text{coll}}$\) | Control Rate \($w_{\dot{u}}$\) | Curvature \($w_{\kappa}$\) |
+|-------|--------------------------|------------------------|------------------------|------------------------------|------------------------|-----------------------------|----------------------|
+| 0     | (0.0, 0.0, 0.0)          | (2.0, 2.0, 0.0)        | 100.0                 | 10.0                         | 0.5                    | 5.0                         | 5.0                  |
+| 1     | (2.0, 0.0, 0.0)          | (0.0, 2.0, 0.0)        | 100.0                 | 10.0                         | 0.5                    | 5.0                         | 5.0                  |
+| 2     | (1.0, 0.1, 0.0)          | (1.0, 1.9, 0.0)        | 100.0                 | 10.0                         | 0.5                    | 5.0                         | 5.0                  |
+
+- These parameters are injected into each agent's model via `GameUnicycleModel`.
+- The third agent moves vertically, navigating the obstacle from below to above.
+
+---
+
+### 7.2 Obstacle Settings and Clearance
+
+- A circular obstacle is placed at \((1.0, 1.0)\) with a radius of \(0.25\).
+- A clearance buffer of \(\varepsilon = 0.05\) is added around obstacles during warm-start path generation.
+- Minimum inter-agent distance is enforced at \(D_{\min} = 0.5\, \text{m}\) via hard linearized constraints.
+
+---
+
+### 7.3 Warm-Start Trajectory Generation
+
+- Each agent is initialized with a **piecewise linear path** from start to goal.
+- These paths are lifted into full state-space trajectories using constant heading and evenly distributed waypoints.
+- Obstacle-aware inflation helps guide the initial guess outside infeasible zones.
+
+---
+
+### 7.4 Final Trajectory Results
+
+<p align="center">
+  <img src="img/Figure_trajectory_game.png" width="500"/>
+  <br/>
+  <em>Figure 7.1: Final trajectories of three agents in the Nash-game scenario. Trajectories respect clearance and reach their goals without collision.</em>
+</p>
+
+---
+
+### 7.5 Convergence of Nash Solver
+
+<p align="center">
+  <img src="img/Figure_cnvrg_game.png" width="500"/>
+  <br/>
+  <em>Figure 7.2: Convergence plot of the Nash iterative best-response solver. The norm of the change in state trajectory \(\|\Delta X\|\) drops below threshold.</em>
+</p>
+
+---
+
+### 7.6 Animation of Agent Motions
+
+<p align="center">
+  <img src="img/game_trajectory_animation.gif" width="500"/>
+  <br/>
+  <em>Figure 7.3: Animated agent motions through obstacle-laden workspace, generated from the final SCvx solution trajectories.</em>
+</p>
