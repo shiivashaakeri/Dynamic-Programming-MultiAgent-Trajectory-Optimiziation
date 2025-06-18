@@ -175,7 +175,7 @@ For every pair of distinct agents $i \ne j$, a minimum separation constraint is 
 1. Relative position (frozen at previous iterates):
 $d_{ij}^{(k)} = p_i^{\text{prev}}(k) - p_j^{\text{prev}}(k)$
 2. Unit normal vector:
-$\hat{n}_{ij}^{(k)} = \frac{d{ij}^{(k)}}{\| d_{ij}^{(k)} \|}$
+$\hat{n}_{ij}^{(k)} = \frac{d_{ij}^{(k)}}{\| d_{ij}^{(k)} \|}$
 3. Linearized constraint:
 $\hat{n}_{ij}^{(k)\top} \left( p_i(k) - p_j(k) \right) \ge d_{\text{min}}^i$
 
