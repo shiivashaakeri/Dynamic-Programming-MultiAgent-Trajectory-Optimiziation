@@ -1,349 +1,395 @@
-# 1. Introduction
+# Theoretical and Mathematical Foundations: Multi-Agent Trajectory Planning with Free Time and Non-Convex Problems Solved by Non-Cooperative Nash Game Wrapped Around Successive Convexification
 
-## 1.1 Problem Motivation
+## 1. Introduction to Multi-Agent Trajectory Planning
+### 1.1. Problem Statement: Navigating Multiple Agents in a Shared Environment
 
-In multi-agent systems such as autonomous drone swarms, mobile robots, or satellite constellations, each agent must plan a trajectory to reach its goal without collisions and while respecting its own dynamics. Centralized methods often scale poorly with the number of agents due to:
-- The curse of dimensionality in the joint state space.
-- The communication bottleneck between agents and a central planner.
-- Lack of privacy or autonomy for independently governed agents.
+The problem is that the trajectory generation for each agent, modeled as a unicycle, navigates from a specified initial state to a desired final state while adhering to its individual dynamics and control limits and avoiding both static obstacles and dynamic collisions with other agents.
 
-A more scalable and decentralized alternative is to treat the problem as a non-cooperative game, where each agent solves its own trajectory optimization by considering the others’ strategies as fixed.
+### 1.2. Challenges: Non-Convexity and Free-Time Optimization
 
-⸻
+This problem presents significant computational challenges primarily due to:
 
-## 1.2 Nash Games in Multi-Agent Motion Planning
+**Non-Convexity**: Collision avoidance constraints (both with static obstacles and other agents) are inherently non-convex and define a non-convex exclusion zone.
 
-We model the interaction as a Nash game over the space of control trajectories:
-- Let agent $i \in \{1, \dots, N\}$ have control input $u_i(t)$ and state $x_i(t)$.
-- Each agent minimizes its own cost functional:
+**Free-Time Optimization**: The optimal duration for each agent's trajectory ($\sigma$) is often not fixed a priori, which adds another layer of non-linearity and complexity to the problem.
+
+### 1.3. Proposed Approach: Non-Cooperative Nash Game with Successive Convexification
+
+To overcome these challenges, a two-layer iterative optimization framework is used:
+
+**Outer Loop**: Non-Cooperative Nash Game via Iterative Best Response: The multi-agent problem is formulated as a non-cooperative game. Each agent $i$ wants to minimize its cost function $\mathcal{J}_i$ , which depends on its trajectory and also the trajectories of all other agents $j\neq i$. A Nash Equilibrium is a state where no agent can unilaterally change its strategy (trajectory) to improve its own cost, given the strategies of all other agents. The Iterative Best Response algorithm is used to seek this equilibrium. In each iteration, each agent calculates its 'best response' (optimal trajectory), assuming the trajectories of all other agents are fixed from the previous iteration. This process repeats until the trajectories of all agents converge.
+
+**Inner Loop**: Successive Convexification (SCvx): Each individual agent's best-response problem is a non-convex optimal control problem. SCvx is an iterative technique designed to solve such problems by sequentially solving a series of convex approximations. In each SCvx iteration, the non-linear dynamics and non-convex constraints are linearized around a current reference trajectory, transforming the problem into a convex Quadratic Program (QP). A trust-region constraint is added to ensure that the solution remains within the region where the linear approximations are valid.
+
+The 'free-time' aspect is handled by introducing a time-scaling factor $\sigma$, which dictates the total duration of the trajectory. While a fully coupled free-time Nash game is complex, this implementation handles it by fixing $\sigma$ at a reference value within the Nash game's outer loop, effectively solving a fixed-time optimal control problem for each agent's best response subproblem.
+
+## 2. Agent Dynamics and Control Model
+### 2.1. Unicycle Kinematic Model
+
+Each agent is modeled as a 2D unicycle, a common non-holonomic vehicle model.
+
+#### 2.1.1. State Variables: $x,y,\theta$
+
+The state of agent $i$ at time $t$ is defined by a vector $\mathbf{x}_i(t)\in \mathbb{R}^3$:
+
 ```math
-J_i(x_i, u_i; \{x_j\}_{j \neq i}) = \int_0^T \ell_i(x_i(t), u_i(t)) \, dt + \Phi_i(x_i(T))
+\mathbf{x}_i(t) = \begin{bmatrix}
+x_i(t) \\ y_i(t) \\ \theta_i(t)
+\end{bmatrix},
+```
+where:
+
+- $x_i(t),\, y_i(t)$ are the coordinates of the agent's position.
+
+- $\theta_i(t)$ is the agent's heading (orientation) relative to the positive $x$-axis.
+
+#### 2.1.2. Control Inputs: Linear Velocity ($v$), Angular Velocity ($\omega$)
+
+The control input vector for agent $i$ at time $t$ is $\mathbf{u}_i(t)\in \mathbb{R}^2$:
+
+```math
+\mathbf{u}_i(t) = \begin{bmatrix}
+v_i(t) \\ \omega_i(t)
+\end{bmatrix},
 ```
 
-subject to dynamics:
-$\dot{x}_i = f_i(x_i, u_i), \quad x_i(0) = x_i^0$
-and collision constraints:
+where:
+
+- $v_i(t)$ is the linear velocity of the agent.
+
+- $\omega_i (t)$ is the angular velocity (rate of change of heading).
+
+#### 2.1.3. Governing Equations of Motion
+
+The continuous-time non-linear kinematic equations for the unicycle model are:
+
 ```math
-\|x_i(t) - x_j(t)\| \geq d_{\min}, \quad \forall j \neq i, \; \forall t \in [0, T]
+\dot{\mathbf{x}}_i(t) = f(\mathbf{x}_i(t), \mathbf{u}_i(t)) = \begin{bmatrix} v_i(t)\,\cos{(\theta_i(t))}\\ v_i(t)\,\sin{(\theta_i(t))} \\ \omega_i(t) \end{bmatrix}
 ```
 
-In this formulation, agents simultaneously minimize their cost while reacting to the others’ planned trajectories, which leads to a Nash equilibrium:
+The UnicycleModel class uses symbolic computation (via sympy) to derive the Jacobian matrices of these dynamics with respect to the state and control inputs:
+​	
 ```math
-\forall i,\quad (x_i^*, u_i^*) = \arg\min_{x_i, u_i} J_i(x_i, u_i; \{x_j^*\}_{j \neq i})
-```
-⸻
-
-## 1.3 Challenges with Decentralization and Coupling
-
-While Nash games offer decentralization, they introduce several mathematical and algorithmic challenges:
-- Coupling through constraints: Collision avoidance inherently couples agents’ decision spaces.
-- Non-convexity: The dynamics and constraints make the optimization landscape non-convex.
-- Convergence to equilibria: Iterative best-response updates do not always converge and can oscillate or diverge.
-
-To address these, we embed each agent’s optimization within a Sequential Convex Programming (SCvx) framework and coordinate agents through Iterative Best Response (IBR) updates. Our method leverages convexification of nonlinear constraints and trust regions to ensure stability and convergence.
-
-# 2. Mathematical Formulation
-
-## 2.1 Agent Dynamics (Unicycle Model)
-
-Each agent $i \in \{1, \dots, N\}$ is modeled using the unicycle dynamics:
-
-```math
-\dot{x}_i = v_i \cos(\theta_i), \quad
-\dot{y}_i = v_i \sin(\theta_i), \quad
-\dot{\theta}_i = \omega_i
-```
-
-or in vector form:
-
-```math
-\dot{r}_i = f(r_i, u_i), \quad
-\text{where } r_i = \begin{bmatrix} x_i \\ y_i \\ \theta_i \end{bmatrix}, \quad
-u_i = \begin{bmatrix} v_i \\ \omega_i \end{bmatrix}
-```
-
-This is discretized using First-Order Hold (FOH) over K time steps for use in trajectory optimization.
-
-## 2.2 Cost Terms per Agent
-
-Each agent i minimizes a convexified objective composed of weighted cost terms:
-
-```math
-J_i = J_{\text{ctrl}} + J_{\text{rate}} + J_{\text{curv}} + J_{\text{inertia}}
-```
-
-### 2.2.1 Control Effort
-
-```math
-J_{\text{ctrl}} = w_{\text{ctrl}} \sum_{k=0}^{K-1} \| u_i(k) \|^2
-```
-
-This penalizes aggressive control inputs (both linear and angular velocity).
-
-### 2.2.2 Control Rate Smoothing
-
-```math
-J_{\text{rate}} = w_{\text{rate}} \sum_{k=0}^{K-2} \| u_i(k+1) - u_i(k) \|^2
-```
-
-Promotes smooth changes in control inputs across the trajectory.
-
-### 2.2.3 Heading Curvature
-
-```math
-J_{\text{curv}} = w_{\text{curv}} \sum_{k=0}^{K-2} \left( \theta_i(k+1) - \theta_i(k) \right)^2
-```
-
-Reduces rapid heading changes and encourages natural turning behavior.
-
-### 2.2.4 Inertia Regularization
-
-```math
-J_{\text{inertia}} = w_{\text{inertia}} \sum_{k=0}^{K-1} \| r_i(k) - r_i^{\text{prev}}(k) \|^2
-```
-
-Regularizes trajectory updates by discouraging large deviations from previous iterations.
-
-## 2.3 Hard Collision Constraints
-
-To ensure safe distances between agents i and j, we linearize the collision constraint around previous trajectories:
-
-```math
-\hat{n}_{ij}^{(k)} = \frac{r_i^{\text{prev}}(k) - r_j^{\text{prev}}(k)}{\|r_i^{\text{prev}}(k) - r_j^{\text{prev}}(k)\|}
+A(\mathbf{x},\mathbf{u})= \frac{\partial f}{\partial \mathbf{x}}=\begin{bmatrix} 0&0& -v\sin{(\theta)}\\ 0&0&v\cos{(\theta)} \\ 0&0&0 \end{bmatrix}
 ```
 
 ```math
-\hat{n}_{ij}^{(k)}{}^\top \left( r_i(k) - r_j(k) \right) \geq d_{\text{min}}, \quad \forall k = 0, \dots, K-1
+B(\mathbf{x},\mathbf{u})= \frac{\partial f}{\partial \mathbf{u}}=\begin{bmatrix} v\cos{(\theta)}&0\\ v\cos{(\theta)}&0 \\ 0&1 \end{bmatrix}
 ```
 
-This constraint is added as a hard constraint to each agent’s optimization problem, ensuring minimum separation $d_{\text{min}}$.
 
-## 2.4 Nash Equilibrium Definition (Best-Response Fixed Point)
+### 2.2. Discretization Method: First-Order Hold
 
-We define the Nash equilibrium as a fixed point of iterative best responses:
+The continuous-time optimal control problem is discretized into a finite-dimensional optimization problem over $K$ discrete time points. FOH approximates the control inputs $u_k$ and $u_{k+1}$ as linearly varying over each time interval $[t_k t_{k+1}]$, and the state is integrated according to the non-linear dynamics.
+
+For a general non-linear system $\dot{\mathbf{x}}=f(\mathbf{x},\mathbf{u})$, the FOH method linearizes the dynamics around a reference trajectory $(\mathbf{x}_{\text{ref},k}, \mathbf{u}_{\text{ref},k})$ to obtain the following discrete-time dynamics:
 
 ```math
-\left\{ (r_i^*, u_i^*) \right\}_{i=1}^N \quad \text{such that} \quad
-(r_i^*, u_i^*) = \arg \min_{r_i, u_i} J_i(r_i, u_i; \{r_j^*\}_{j \ne i})
+x_{k+1} = \bar{\mathbf{A}}_{k} \mathbf{x}_k+ \bar{\mathbf{B}}_{k} \mathbf{u}_k + \bar{\mathbf{C}}_{k} \mathbf{u}_{k+1}+ \bar{\mathbf{S}}_{k} \sigma + \bar{\mathbf{z}}_k + \nu_k
 ```
 
-Each agent optimizes its own cost, treating other agents’ trajectories as fixed. Iterating this best-response process leads to convergence under suitable conditions (e.g., convex cost, smooth constraints, trust regions).
+where:
 
-# 3. Game-Specific Model Extensions
+- $x_k$ and $u_k$ are the state and control variables at time step $k$.
 
-This section describes how agent-specific modeling and interaction terms are incorporated into the mathematical formulation of a non-cooperative multi-agent trajectory game.
+- $\sigma$ is the total trajectory duration (time scaling factor).
 
-⸻
+- $\nu_k \in \mathbb{R}^3$ is the *defect variable* at time step $k$. This variable is introduced in SCvx to turn the equality constraint into an inequality that penalizes deviations from the linearized dynamics, enabling the problem to remain convex even if the linearization is imperfect. In the context of the SCProblem, it represents a "virtual control" that allows for violations of the linearized dynamics, which are then penalized in the objective.
 
-## 3.1 Per-Agent Cost Structure
+- $\bar{\mathbf{A}}_{k}, \bar{\mathbf{B}}_{k}, \bar{\mathbf{C}}_{k}, \bar{\mathbf{S}}_{k}, \bar{\mathbf{z}}_{k}$ are the discretization matrices.
 
-Each agent $i \in \{1, \dots, N\}$ is modeled with its own dynamics and a personalized cost function, leading to a non-cooperative game formulation. The decision variables for agent $i$ are its state $X_i \in \mathbb{R}^{n \times K}$ and control$ U_i \in \mathbb{R}^{m \times K}$, over a time horizon of $K$ steps.
+## 3. Optimal Control Problem Formulation for a Single Agent
+Within the SCvx framework, each agent solves a convex optimal control problem. This problem is defined by an objective function and a set of constraints.
 
-The cost function for agent $i$ is defined as:
-```math
-J_i(X_i, U_i; X_{-i}) = J_{\text{ctrl},i} + J_{\text{rate},i} + J_{\text{curv},i} + J_{\text{inertia},i}
-```
+### 3.1. Objective Function (Cost Functional)
 
-where each term is:
-- Control Effort:
-```math
-J_{\text{ctrl},i} = w_{\text{ctrl}}^i \sum_{k=0}^{K-1} \| u_i(k) \|^2
-```
-
-- Control Rate Smoothing:
-```math
-J_{\text{rate},i} = w_{\text{rate}}^i \sum_{k=0}^{K-2} \| u_i(k+1) - u_i(k) \|^2
-```
-
-- Heading Curvature (for orientation $\theta_i$):
-```math
-J_{\text{curv},i} = w_{\text{curv}}^i \sum_{k=0}^{K-2} \left( \theta_i(k+1) - \theta_i(k) \right)^2
-```
-
-- Inertia Regularization (distance to previous trajectory):
-```math
-J_{\text{inertia},i} = w_{\text{inertia}}^i \sum_{k=0}^{K-1} \| X_i(k) - X_i^{\text{prev}}(k) \|^2
-```
-
-Here, $w_{\text{ctrl}}^i, w_{\text{rate}}^i, \ldots$ are agent-specific weights, and $X_i^{\text{prev}}$ is the previous iterate of the agent’s trajectory.
-
-## 3.2 Game-Theoretic Coupling via Constraints
-
-Agents are coupled through collision avoidance constraints, which are applied as hard constraints in the optimization problem.
-
-For every pair of distinct agents $i \ne j$, a minimum separation constraint is enforced. Let $p_i(k) \in \mathbb{R}^2$ denote the position of agent $i$ at timestep $k$. The linearized constraint for each timestep $k$ is:
-1. Relative position (frozen at previous iterates):
-$d_{ij}^{(k)} = p_i^{\text{prev}}(k) - p_j^{\text{prev}}(k)$
-2. Unit normal vector:
-```math
-\hat{n}_{ij}^{(k)} = \frac{d_{ij}^{(k)}}{\| d_{ij}^{(k)} \|}
-```
-3. Linearized constraint:
-```math
-\hat{n}_{ij}^{(k)\top} \left( p_i(k) - p_j(k) \right) \ge d_{\text{min}}^i
-```
-
-This enforces a convexified buffer zone around each agent at every timestep, maintaining distance without introducing non-convex constraints.
-
-## 3.3 Agent-Level Optimization Problem
-
-Each agent solves the following constrained optimization problem:
+The objective for each agent $i$ is to minimize a sum of weighted terms. The total objective for agent $i$ in a given SCvx iteration can be expressed as:
 
 ```math
-\begin{aligned}
-\min_{X_i, U_i} \quad & J_i(X_i, U_i; X_{-i}) \\
-\text{s.t.} \quad
-& X_i(k+1) = f_d(X_i(k), U_i(k)), \quad k = 0, \dots, K-1 \\
-& X_i(0) = x_{i,\text{init}}, \quad X_i(K) = x_{i,\text{final}} \\
-& \hat{n}_{ij}^{(k)\top} \left( p_i(k) - p_j(k) \right) \ge d_{\text{min}}^i, \quad \forall j \ne i, \, \forall k
-\end{aligned}
+\min_{\mathbf{X}_i,\mathbf{U}_i, \nu_i, \mathbf{s}'_i} \, \mathcal{J}_i(\mathbf{X}_i,\mathbf{U}_i, \nu_i, \mathbf{s}'_i, \sigma\, \mid \, \mathbf{X}_{\text{ref},i}, \mathbf{U}_{\text{ref},i}, \mathbf{X}_{\text{prev},i}, \mathbf{X}_{\text{neigh},\text{curr}}, \mathbf{X}_{\text{neigh},\text{prev}})
 ```
 
-where $f_d$ denotes the discretized unicycle dynamics. The linearized constraints depend on the neighbors’ previous trajectories, yielding a best-response structure.
+#### 3.1.1. Control Effort Minimization
 
-# 4. Nash Optimization Algorithm
-
-This section formalizes the algorithmic structure used to compute a Nash equilibrium in a multi-agent trajectory optimization problem using iterative best-response dynamics.
-
-## 4.1 Iterative Best Response (IBR)
-
-In a non-cooperative game, each agent seeks to minimize its own objective function assuming the strategies (trajectories) of other agents are fixed.
-
-Let $\mathcal{X} = (X_1, \dots, X_N)$ denote the joint state trajectories and $\mathcal{U} = (U_1, \dots, U_N)$ the joint control trajectories of all agents. A Nash equilibrium satisfies:
+This term penalizes the magnitude of the control inputs, promoting energy efficiency and smoother control actions.
 
 ```math
-(X_i^*, U_i^*) = \arg\min_{X_i, U_i} \; J_i(X_i, U_i; X_{-i}^*, U_{-i}^*) \quad \forall i \in \{1, \dots, N\}
+\mathcal{J}_{\text{ctrl}} = w_{\text{ctrl}} \sum_{k=0}^{K-1} ||\mathbf{u}_{i,k}||_2^2
 ```
 
-The Iterative Best Response (IBR) algorithm approximates the Nash equilibrium via a fixed-point iteration. At iteration $t$, each agent solves:
+#### 3.1.2. Control Rate Smoothing
+
+This term penalizes large changes in control inputs between consecutive time steps, leading to smoother, less "jerky" control profiles.
+​	
+```math
+\mathcal{J}_{\text{ctrl\_rate}} \sum_{k=0}^{K-2} ||\mathbf{u}_{i,k+1} - \mathbf{u}_{i,k}||_2^2
+```
+
+#### 3.1.3. Curvature Smoothing
+
+This term penalizes sharp turns by minimizing changes in the agent's heading angle.
 
 ```math
-(X_i^{(t)}, U_i^{(t)}) = \arg\min_{X_i, U_i} \; J_i(X_i, U_i; X_{-i}^{(t-1)})
+\mathcal{J}_{\text{curv}} = w_{\text{curv}} \sum_{k=0}^{K-2} (\theta_{i,k+1} - \theta_{i,k})^2
 ```
 
-The algorithm proceeds by updating each agent sequentially or in parallel, using the most recent trajectory information of the others.
+#### 3.1.4. Inertia Regularization
 
-## 4.2 AgentBestResponse: Local Convex Subproblem
+This term penalizes deviations of the current trajectory from the reference trajectory used for linearization (specifically, the trajectory from the previous outer Nash iteration). 
+​	
+```math
+\mathcal{J}_{\text{inertia}} = w_{\text{inertia}} \sum_{k=0}^{K-1} ||\mathbf{x}_{i,k} - \mathbf{x}_{\text{prev}, i,k}||_2^2
+```
 
-Each best-response problem is formulated using Successive Convexification (SCvx), where the agent solves a convex approximation of its nonlinear trajectory optimization problem.
 
-For agent $i$, given:
-- previous iterate $X_i^{\text{prev}}, U_i^{\text{prev}}$,
-- linearization of its dynamics $f_d$,
-- neighbor trajectories $\{X_j^{\text{prev}} \}_{j \ne i}$,
+#### 3.1.5. Obstacle Slack Penalty
 
-the local convex program becomes:
+For linearized static obstacle avoidance, slack variables $s'_{j,k}$ are introduced to relax the hard constraints and ensure feasibility in cases where strict avoidance might be impossible or overly restrictive. These slack variables are penalized in the objective.
 
 ```math
-\begin{aligned}
-\min_{X_i, U_i} \quad & J_i^{\text{convex}}(X_i, U_i; X_{-i}^{\text{prev}}) \\
-\text{s.t.} \quad
-& \text{Discretized linear dynamics: } A_i X_i + B_i U_i = z_i \\
-& \text{Linearized collision constraints: } \hat{n}_{ij}^\top(p_i - p_j^{\text{prev}}) \ge d{\min} \\
-& \text{Trust region constraints: } \| X_i - X_i^{\text{prev}} \|_F \le \delta_i
-\end{aligned}
+\mathcal{J}_{\text{slack}} = w_\text{slack} \sum_{j=1}^{N_{\text{obs}}} \sum_{k=0}^{K-1} s'_{j,k}
 ```
 
-Here, $A_i, B_i$ are discretized dynamics matrices, and $\delta_i$ is a trust-region radius.
+#### 3.1.6. Defect Penalty
 
+The defect variables $\nu_k$ are penalized to encourage the linearized dynamics to accurately represent the true non-linear dynamics.
 
-## 4.3 NashSolver: Outer Loop Coordination
-
-The outer loop coordinates all agents by sweeping through them one-by-one, letting each solve its best-response problem while holding the others fixed. The full algorithm is as follows:
-
-⸻
-
-Iterative Best-Response Algorithm:
-1. Initialize $X_i^{(0)}, U_i^{(0)}$ for all $i$
-2. For iteration $t = 1, 2, \dots$:
-    - For each agent $i = 1, \dots, N$:
-        ```math
-        (X_i^{(t)}, U_i^{(t)}) \leftarrow \arg\min_{X_i, U_i} J_i(X_i, U_i; X_{-i}^{(t-1)})
-        ```
-    - Compute total state change:
-        ```math
-        \Delta^{(t)} = \max_i \| X_i^{(t)} - X_i^{(t-1)} \|_F
-        ```
-    - If $\Delta^{(t)} < \texttt{tol}$, terminate
-
-## 4.4 Convergence Criterion (‖ΔX‖ < tol)
-
-The algorithm halts when the maximum state change between iterations is sufficiently small:
-
-$$\Delta^{(t)} := \max_i \| X_i^{(t)} - X_i^{(t-1)} \|_F < \varepsilon$$
-
-This reflects convergence to a fixed point in trajectory space, i.e., a Nash equilibrium where no agent has incentive to deviate given others’ strategies.
-
-# 5. Code Architecture
-
-This section explains how the theoretical components of the Nash-game-based multi-agent trajectory optimization are implemented in code. The system is designed with modularity and clarity in mind, allowing each agent to solve its own optimal control problem while interacting with others through shared state trajectories.
-
-⸻
-
-## 5.1 Overview
-
-The implementation is structured around three core classes, each corresponding to a key theoretical element:
-- $\texttt{GameUnicycleModel}$: encapsulates agent-specific dynamics and cost structure.
-- $\texttt{AgentBestResponse}$: builds and solves the convex best-response problem for a single agent.
-- $\texttt{NashSolver}$: orchestrates the iterative optimization loop across all agents.
-
-⸻
-
-### 5.1.1 $\texttt{GameUnicycleModel}$
-- Extends a base unicycle model by adding agent-specific cost weights (e.g., control effort, curvature, collision avoidance).
-- Implements *get_cost_function()*, which generates a CVXPY expression equivalent to the convexified cost:
 ```math
-J_i^{\text{convex}} = w_u \| U_i \|^2 + w_{\dot{u}} \| \Delta U_i \|^2 + w_{\theta} \| \Delta \theta_i \|^2 + \text{(collision constraints)} + \text{(inertia)}
+\mathcal{J}_{\text{defect}} = w_{\nu} \sum_{k=0}^{K-2} ||\nu_k||_1
 ```
-- Also generates linearized collision constraints with respect to neighbors using directional derivatives.
 
-⸻
+#### 3.1.7. Time Penalty
 
-### 5.1.2 AgentBestResponse
-- Represents an individual agent’s best-response solver.
-- At each outer iteration:
-    - Accepts neighbor trajectories$ $\{X_j^{\text{prev}}\}_{j \ne i}$ as parameters.
-    - Injects dynamics linearization matrices $(A_i, B_i, \dots)$, reference trajectories $(X_i^{\text{ref}}, U_i^{\text{ref}})$, and trust region radius.
-    - Constructs a convex optimization problem using CVXPY, matching the form in Section 4.2:
-    ```math
-    \min \; \text{SCvx}(X_i, U_i) + J_i^{\text{convex}}(X_i, U_i; X_{-i})
-    ```
-- On solve, returns updated trajectories $X_i, U_i$ and slack variables.
+The time scaling factor $\sigma$ is penalized to encourage faster trajectories, subject to other constraints.
 
-⸻
+```math
+\mathcal{J}_{\text{time}} = w_{\sigma} \sigma
+```
 
-### 5.1.3 NashSolver
-- Implements the Iterative Best Response (IBR) loop from Section 4.
-- Holds a list of AgentBestResponse solvers, one per agent.
-- For each outer iteration:
-    - Linearizes dynamics for each agent based on its current trajectory.
-    - Calls AgentBestResponse.setup() to build each convex subproblem.
-    - Solves each agent’s problem sequentially.
-    - Monitors change in trajectories $\|X_i^{(t)} - X_i^{(t-1)}\|$ and halts when convergence is achieved.
+#### 3.1.8. Overall Cost Functional
 
-⸻
+The total objective function for agent $i$'s best-response problem within the SCvx framework is the sum of these terms:
 
-## 5.2 Parameter Injection and Problem Setup
 
-All CVXPY variables and parameters are created once and reused across iterations for efficiency. The typical data flow per agent is:
-1.	Trajectory Guess: From warm start (e.g., straight-line initialization).
+```math
+\mathcal{J}_i^{\text{total}} = \mathcal{J}_{\text{ctrl}}+\mathcal{J}_{\text{ctrl\_rate}} + \mathcal{J}_{\text{curv}} + \mathcal{J}_{\text{inertia}}+ \mathcal{J}_{\text{slack}}+ \mathcal{J}_{\text{defect}}+ \mathcal{J}_{\text{time}}
+```
+​	
+ 
+### 3.2. Constraints
 
-2.	Dynamics Linearization: Via FirstOrderHold.
+The optimal control problem for each agent is subject to several constraints:
 
-3.	Parameter Injection:
-    - $X_i^{\text{prev}}$ for trust region and inertia.
-    - $X_j^{\text{prev}}$ for linearized inter-agent constraints.
-4.	Problem Construction: Cost and constraints are composed in get_cost_function() and added to the SCvx base problem.
-5.	Solve: A single agent’s updated result is returned and inserted into the global trajectory list.
+#### 3.2.1. Initial and Final State Constraints
 
-⸻
+The agent's trajectory must start at a specified initial state and end at a desired final state:
 
-## 5.3 Reusability: Wrapping Around SCvx
+```math
+\mathbf{x}_{i,0} = \mathbf{x}_{\text{init},i} \\ \mathbf{x}_{i,K-1} = \mathbf{x}_{\text{final},i}
+```
+Additionally, initial and final controls are set to zero for smooth start/stop: 
+```math
+\mathbf{u}_{i,0} = \mathbf{0} \\ \mathbf{u}_{i,K-1} = \mathbf{0}
+```
 
-The entire Nash game formulation wraps around an existing SCvx optimizer, reused as the backbone for each agent’s problem. This promotes:
-- Code reuse: all trajectory, trust-region, and slack-handling mechanisms are inherited from SCvx.
-- Consistency: ensures each agent’s local optimization aligns with a unified mathematical structure.
-- Extensibility: allows future extension to include soft collisions, time-varying dynamics, or cooperative variants.
+
+#### 3.2.2. Dynamics Constraints (Equality Constraints)
+
+The discrete-time dynamics derived from the FOH linearization must be satisfied at each time step, with the inclusion of the defect variable $\nu$ 
+
+```math
+\mathbf{x}_{i,k+1} = \bar{\mathbf{A}}_{k} \mathbf{x}_{i,k}+ \bar{\mathbf{B}}_{k} \mathbf{u}_{i,k} + \bar{\mathbf{C}}_{k} \mathbf{u}_{i,{k+1}}+ \bar{\mathbf{S}}_{k} \sigma + \bar{\mathbf{z}}_k + \nu_{i,k}, \quad  \text{for } k=0,\dots,K−2
+```
+
+#### 3.2.3. Control Input Limits
+
+The control inputs (linear and angular velocities) are bounded:
+
+```math
+0 \leq v_{i,k} \leq v_{\text{max},i}\\
+-\omega_{\text{max},i} \leq \omega_{i,k} \leq \omega_{\text{max},i}
+```
+
+#### 3.2.4. State Bounds (Spatial)
+
+The agent's position must remain within defined spatial boundaries:
+
+```math
+\text{lb} + R_{\text{robot}} \leq x_{i,k} \leq \text{ub} - R_{\text{robot}}\\
+\text{lb} + R_{\text{robot}} \leq y_{i,k} \leq \text{ub} - R_{\text{robot}}
+```
+is the agent's physical radius.
+
+#### 3.2.5. Static Obstacle Avoidance (Linearized)
+
+Static obstacles are circular. The non-convex constraint for avoiding obstacle $j$ with center $\textbf{p}_{\text{obs},j}$
+and radius $R_{\text{obs},j}$ is:
+
+```math
+||\mathbf{p}_{i,k} - \mathbf{p}_{\text{obs},k}||_2 \geq R_{\text{obs},j} + R_{\text{robot},i}
+```
+
+where $\textbf{p}_{i,k} = [x_{i,k},\, y_{i,k}]^\top$
+ is the center of the agent.
+This non-convex constraint is linearized around the reference position $\textbf{x}_{\text{ref}, i,k}$ from the previous SCvx iteration and includes a non-negative slack variable $s'_{j,k}$
+
+```math
+\hat{\textbf{n}}_{j,k}^\top (\textbf{p}_{i,k} - \textbf{p}_{\text{obs},j}) \geq (R_{\text{obs},j} +  R_{\text{robot},i}) - s'_{j,k}
+```
+
+where  
+$\hat{\textbf{n}}_{j,k}$ is the normalized vector from the obstacle center to the reference position of agent $i$:
+​
+```math
+\hat{\textbf{n}}_{j,k}=\frac{\textbf{x}_{\text{ref}, i,k}[0:2] - \mathbf{p}_{\text{obs},j}}{||\textbf{x}_{\text{ref}, i,k}[0:2] - \mathbf{p}_{\text{obs},j}||_2 + \epsilon}
+```
+
+The $\epsilon$ term prevents division by zero.
+
+
+## 4. Successive Convexification (SCvx) Algorithm
+The SCProblem encapsulates the convex optimization problem solved in each iteration of the SCvx algorithm.
+
+### 4.1. Iterative Approximation of Non-Convex Problems
+
+SCvx is an iterative technique that approximates a non-linear, non-convex optimal control problem by a sequence of convex Quadratic Programs (QPs). Each QP is formed by:
+
+1. Linearizing the non-linear dynamics and non-convex constraints around a current reference trajectory.
+
+2. Adding a trust-region constraint to ensure that the solution remains close to the linearization point, where the approximations are valid.
+
+3. Penalizing the "defect" in the linearized dynamics.
+
+### 4.2. Convex Quadratic Program (QP) Structure
+
+The SCProblem constructs a QP for agent $i$ in each SCvx iteration. The decision variables are the state trajectory $\mathbf{X}_i$, control trajectory $\mathbf{U}_i$, defect variables $\nu_i$, and the time scaling factor $\sigma_i$.
+
+#### 4.2.1. Objective Function in QP Form
+
+The overall objective function, as described in Section 3.1.8, is convex and composed of quadratic terms and linear terms. This structure ensures the problem is a QP.
+
+#### 4.2.2. Linear Equality and Inequality Constraints
+
+The constraints defined in Section 3.2 are all formulated as linear equality or inequality constraints on the decision variables.
+
+- Dynamics Constraints: The discrete-time dynamics (Section 3.2.2) are linear equality constraints in $\mathbf{X}_i, \mathbf{U}_i, \nu_i, \sigma$
+
+- Boundary Conditions: Initial/final states and controls (Section 3.2.1) are linear equality constraints.
+
+- Input/State Bounds: These (Sections 3.2.3, 3.2.4) are linear inequality constraints.
+
+- Static Obstacle Constraints: The linearized obstacle avoidance (Section 3.2.5) with slack variables forms linear inequality constraints.
+
+- Inter-Agent Collision Constraints: The linearized inter-agent collision avoidance (Section 4.2) also forms linear inequality constraints.
+
+### 4.3. Trust Region Mechanism
+
+A crucial component of SCvx is the trust region constraint, which limits the allowable deviation of the current solution from the linearization reference point. This ensures that the linear approximations remain accurate.
+The trust region is typically an $L_1$ norm constraint on the deviation of states, controls, and time scaling from their reference values:
+
+```math
+||\mathbf{X}_i - \mathbf{X}_{\text{ref},i}||_1+||\mathbf{U}_i - \mathbf{U}_{\text{ref},i}||_1 + |\sigma_i - \sigma_{\text{ref},i}| \leq \Delta 
+```
+where
+​	
+- $\mathbf{X}_{\text{ref},i}, \mathbf{U}_{\text{ref},i}, \sigma_{\text{ref},i}$ are the state, control, and time scaling reference from the previous SCvx iteration.
+
+- $\Delta$ is the trust region radius.
+
+
+## 5. Non-Cooperative Nash Game Framework
+The highest level of the algorithm is the non-cooperative Nash game, solved using an Iterative Best Response strategy.
+
+### 5.1. Fundamentals of Game Theory and Nash Equilibrium
+
+A non-cooperative game involves multiple players, each making decisions to optimize their own objective function, given the decisions of others. A Nash Equilibrium is a set of strategies such that no player can improve its own objective by unilaterally changing its strategy, assuming all other players' strategies remain fixed.
+
+### 5.2. Iterative Best Response Algorithm
+
+The NashSolver class implements the Iterative Best Response algorithm to find a Nash Equilibrium. The process is as follows:
+
+#### 5.2.1. Definition of Best Response for Agent $i$
+
+For agent $i$, its best response $(\mathbf{X}_i^*,\mathbf{U}_i^*)$ is the solution to its optimal control problem:
+
+```math
+(\mathbf{X}_i^*,\mathbf{U}_i^*) = \arg\min_{\mathbf{X}_i,\mathbf{U}_i} \mathcal{J}_i (\mathbf{X}_i,\mathbf{U}_i \mid \{\mathbf{X}_j,\mathbf{U}_j\}_{j\neq i, \text{fixed}})
+```
+
+This means agent $i$ finds its optimal trajectory while the trajectories of all other agents $j\neq i$ are fixed parameters.
+
+#### 5.2.2. Sequential Update Strategy
+
+The $\texttt{NashSolver.solve()}$ method uses a sequential update strategy:
+
+In each outer Nash iteration, agents are processed one by one (from $i=0 $to $N−1$).
+
+When agent $i$ solves its best response, it uses the most recently updated trajectories of its neighbors. This means if agent $j$ (where $j<i$) has already updated its trajectory in the current outer iteration, agent $i$ will react to agent $j$'s new trajectory. If agent $l$ (where $l>i$) has not yet updated, agent $i$ will react to agent $l$'s trajectory from the previous outer iteration.
+
+After agent $i$ computes its new best response $(\mathbf{X}_{\text{new},i},\mathbf{U}_{\text{new},i})$, its current trajectories are immediately updated.
+
+#### 5.2.3. Role of Other Agents' Fixed Trajectories
+
+For agent $i$ to solve its best response, the trajectories of other agents $j\neq i$ must be treated as known. 
+
+### 5.3. Handling Free-Time Optimization via Fixed $\sigma$
+
+The concept of "free time" implies that the total duration of the maneuver is also optimized. In this specific implementation, $\texttt{sigma\_ref}$ is passed into $\texttt{NashSolver.solve()}$ as a fixed initial value for the entire Nash game.
+Crucially, within each agent's best-response problem (in $\texttt{AgentBestResponse.setup}$), the decision variable $\texttt{self.scp.var["sigma"]}$ is explicitly pinned to this sigma_ref value via the constraint:
+
+```math
+\sigma_i = \sigma_{\text{ref}}
+```
+
+This simplifies each best-response subproblem to a fixed-time optimal control problem. While the code provides the mechanism for a time-scaling variable, the overall NashSolver itself does not adapt sigma iteratively to find an "optimal" free time across the game; it finds a Nash Equilibrium for the given sigma_ref. This implies that the overall free-time optimization would need to be handled by an even outer-most loop not present in the provided code, or sigma_ref is considered a hyperparameter chosen externally.
+
+## 6. Overall Algorithm: Nash Game Wrapped SCvx
+The complete algorithm operates as a nested iterative process:
+
+### 6.1. Outer Loop: Iterative Best Response for Nash Equilibrium
+
+
+**Inputs**: Initial guess trajectories for all agents $(\mathbf{X}_{\text{refs}}, \mathbf{U}_{\text{refs}})$, and a reference total time $\sigma_{\text{ref}}$
+​	
+
+**Process**:
+
+1. Initialization: Set $\mathbf{X}_{\text{curr}}= \mathbf{X}_{\text{refs}}$, $\mathbf{U}_{\text{curr}}= \mathbf{U}_{\text{refs}}$
+
+2. Iterate for $\text{it}=0,…,\text{max\_iter}−1$:
+
+  - Record $\mathbf{X}_{\text{prev\_all}}$ as a copy of $\mathbf{X}_{\text{curr}}$ from the beginning of this outer iteration. This is used for collision linearization.
+
+ - $\Delta$ is initialized to $0$.
+
+ - For each agent $i=0,\dots ,N−1$ (sequential update):
+
+    - Retrieve discretized dynamics matrices $(\bar{\mathbf{A}}, \dots,\bar{\mathbf{z}})$ for agent $i$ based on its current $\mathbf{X}_{\text{curr}}[i], \mathbf{U}_{\text{curr}}[i]$
+
+    - Prepare neighbor references: current neighbor ($\mathbf{X}_{\text{curr}}$ for $j\neq i$) and previous neighbor ($\mathbf{X}_{\text{prev}}$ for $j\neq i$).
+
+    - Call $\texttt{AgentBestResponse.setup()}$: Formulate agent $i$'s convex QP using the current references, the fixed $\sigma_{\texttt{ref}}$, the linearized dynamics, and the current/previous neighbor trajectories. This step sets up the SCvx problem for agent $i$.
+
+    - Call $\texttt{AgentBestResponse.setup()}$: Solve the convex QP.
+
+    - Update $\mathbf{X}_{\text{curr}}, \mathbf{U}_{\text{curr}}$ with the newly found best response.
+
+    - Calculate the change: $\Delta = ||\mathbf{X}_{\text{new},i}- \mathbf{X}_{\text{old},i}||$, update $\Delta$
+
+    - Convergence Check: If $\Delta < \text{tol}$, break the loop.
+
+### 6.2. Inner Loop: Successive Convexification for Each Agent's Best Response
+
+Each call to $\texttt{AgentBestResponse.solve()}$ internally triggers the SCvx iterations (controlled by the $\texttt{SCProblem}$ class). This inner loop is abstracted away in the provided $\texttt{AgentBestResponse.solve()}$ code, which assumes $\texttt{SCProblem.solve()}$ handles the full SCvx process. In a complete SCvx implementation, $\texttt{SCProblem.solve()}$ would be called iteratively, with $X_\text{ref}, U_\text{ref}$, and $\Delta$ being updated based on the solution quality, until the inner SCvx problem converges. For this code, it appears $\texttt{SCProblem.solve()}$ refers to a single pass through the convex solver with a fixed $\Delta$, which is a common pattern when SCvx is handled by an external loop, but here it's implicitly handled by the cvxpy solver itself once parameters are set.
+
+### 6.3. Convergence Criteria and Termination Conditions
+
+The outer Nash game loop terminates when one of two conditions is met:
+
+- Convergence: The maximum Euclidean norm of the difference between the current and previous trajectories across all agents falls below a specified tolerance.
+
+- Maximum Iterations: The number of outer Nash iterations reaches $\text{max\_iter}$.
+
 
 ## 7. Experimental Results
 
