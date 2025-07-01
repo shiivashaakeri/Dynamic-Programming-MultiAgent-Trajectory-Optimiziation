@@ -1,9 +1,3 @@
-"""Example: Non-cooperative Nash equilibrium with the default game scenario.
-
-Uses the scenario defined in ``SCvx/config/game_scenarios/default_game.py``
-so you can tweak agent start/goal, obstacle list, weights, etc. in one spot.
-"""
-
 import os
 
 import matplotlib.pyplot as plt
@@ -85,7 +79,7 @@ def main():
     # Animate all agents together with obstacles
     anim = animate_multi_agents(X_fin, mam.models, interval=200)
     anim.save(save_path, writer="pillow", fps=5)
-    plt.show()          # keep this line
+    plt.show()  # keep this line
 
 
 if __name__ == "__main__":

@@ -43,7 +43,6 @@ class AgentBestResponse:
         neighbour_prev_refs: Dict[int, np.ndarray],
         tr_radius: float = TRUST_RADIUS0,
     ) -> None:
-        """Build & parameterize the convex best-response problem with o fixed."""
         # 1) build fresh SCProblem
         self.scp = SCProblem(self.model)
 
@@ -52,11 +51,10 @@ class AgentBestResponse:
         for j, P in self.Y_params.items():
             P.value = neighbour_refs[j][0:2, :]
 
-        neighbour_prev_pos = [
-            neighbour_prev_refs[j][0:2, :] for j in self.Y_params
-        ]
+        # pack the numpy lists
+        neighbour_prev_pos = [neighbour_prev_refs[j][0:2, :] for j in self.Y_params]
 
-        # 3) build the extra cost (control + smooth + inertia + collision)
+        # 3) build the extra cost (this also lazy-inits z_params + slab constraints)
         extra_cost = self.model.get_cost_function(
             X_v=self.scp.var["X"],
             U_v=self.scp.var["U"],
@@ -65,19 +63,24 @@ class AgentBestResponse:
             neighbour_prev_pos=neighbour_prev_pos,
         )
 
-        # 4) replace objective, append any linearized-collision constraints
+        # ────────────────────────────────────────────────────────────────────
+        # **NEW**: immediately do one dual update with your initial guess,
+        # so z_params are pointing along X_prev → neighbour_prev and satisfy
+        # zᵀ (p_i_prev - P_j_prev) ≥ d_min.
+        p_i_prev_array = X_prev[0:2, :]
+        self.model.update_slabs(p_i_prev_array, neighbour_prev_pos)
+        # ────────────────────────────────────────────────────────────────────
+
+        # 4) rebuild the Problem including your slab constraints
         base_obj = self.scp.prob.objective.args[0]
         all_cons = list(self.scp.prob.constraints) + self.model.extra_constraints
-
-        # 5) pin o to the reference
         all_cons.append(self.scp.var["sigma"] == sigma_ref)
-        # 6) rebuild the Problem
         self.scp.prob = cvx.Problem(
             cvx.Minimize(base_obj + extra_cost),
             all_cons,
         )
 
-        # 7) set dynamics & trust-region parameters
+        # 5) set dynamics & trust-region parameters
         A_bar, B_bar, C_bar, S_bar, z_bar = discr_mats
         self.scp.set_parameters(
             A_bar=A_bar,

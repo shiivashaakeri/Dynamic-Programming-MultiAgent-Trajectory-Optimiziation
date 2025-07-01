@@ -4,10 +4,10 @@
 K = 50
 
 # Maximum number of SCvx iterations
-MAX_ITER = 20
+MAX_ITER = 30
 
 # Initial trust region radius
-TRUST_RADIUS0 = 20.0
+TRUST_RADIUS0 = 17.0
 
 # Tolerance for convergence (e.g., change in cost or trajectory)
 CONV_TOL = 1e-3
