@@ -10,8 +10,8 @@ def primal_residual(p_j: np.ndarray, Y_ij: np.ndarray) -> float:
     Compute the primal residual for consensus: ||p_j - Y_ij||_2.
 
     Args:
-        p_j: np.ndarray of shape (2, K), true positions of agent j
-        Y_ij: np.ndarray of shape (2, K), agent i's estimate of agent j's positions
+        p_j: np.ndarray of shape (3, K), true 3D positions of agent j
+        Y_ij: np.ndarray of shape (3, K), agent i's estimate of agent j's positions
     Returns:
         float: Euclidean norm of the residual
     """
@@ -23,8 +23,8 @@ def dual_residual(Y_new: np.ndarray, Y_old: np.ndarray) -> float:
     Compute the dual residual for consensus updates: ||Y_new - Y_old||_2.
 
     Args:
-        Y_new: np.ndarray of shape (2, K)
-        Y_old: np.ndarray of shape (2, K)
+        Y_new: np.ndarray of shape (3, K)
+        Y_old: np.ndarray of shape (3, K)
     Returns:
         float: Euclidean norm of the residual
     """

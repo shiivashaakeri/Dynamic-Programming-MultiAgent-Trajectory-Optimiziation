@@ -1,13 +1,13 @@
 # Global parameters for Successive Convexification (SCvx)
 
 # Number of discretization points
-K = 50
+K = 100
 
 # Maximum number of SCvx iterations
 MAX_ITER = 30
 
 # Initial trust region radius
-TRUST_RADIUS0 = 17.0
+TRUST_RADIUS0 = 20.0
 
 # Tolerance for convergence (e.g., change in cost or trajectory)
 CONV_TOL = 1e-3
