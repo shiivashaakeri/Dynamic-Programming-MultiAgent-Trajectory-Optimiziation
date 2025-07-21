@@ -63,12 +63,22 @@ class SI_AgentBestResponse:
         )
         # initialise z‑slabs once
         self.model.update_slabs(X_prev[0:3, :], neighbour_prev_pos)
-
+        # Insert inter‐sample obstacle constraints
+        self.model.update_intersample_constraints(
+            X_v=self.scp.var["X"],
+            U_v=self.scp.var["U"],
+            X_nom=X_ref,  # your X_ref array
+            U_nom=U_ref,  # your U_ref array
+            foh=self.foh,  # this agent’s FOH object
+            sigma_ref=sigma_ref,
+        )
         # Rebuild objective with extra cost and fixed sigma
         base_obj = self.scp.prob.objective.args[0]
         total_obj = cvx.Minimize(base_obj + extra_cost)
-        all_cons = list(self.scp.prob.constraints) + self.model.extra_constraints
+        all_cons = list(self.scp.prob.constraints)         # existing model & dynamics
+        all_cons += self.model.extra_constraints           # slab + intersample
         all_cons.append(self.scp.var["sigma"] == sigma_ref)
+    # Rebuild the CVXPY problem with the full constraint set
         self.scp.prob = cvx.Problem(total_obj, all_cons)
 
         # dynamics / trust‑region params
@@ -93,21 +103,18 @@ class SI_AgentBestResponse:
             raise RuntimeError("setup() must be called first")
 
         # Solve the problem
-        self.scp.solve(solver=solver, warm_start=True, **solver_kwargs)
+        self.scp.solve(solver=solver, warm_start=True, **solver_kwargs, verbose=False)
 
-        # --- NEW: Robust check for solver status ---
-        # A solver can "finish" without error, but find the problem is infeasible.
-        # This is the most likely cause of the NoneType error.
         if self.scp.prob.status not in ["optimal", "optimal_inaccurate"]:
             print(f"!! Solver for Agent {self.i} failed with status: {self.scp.prob.status} !!")
             # You can optionally add more debug prints here to inspect parameter values
             raise RuntimeError(f"SCProblem for agent {self.i} was not solved successfully.")
-        
+
         # Original code continues here
         X_i = self.scp.get_variable("X")
         U_i = self.scp.get_variable("U")
         nu_i = self.scp.get_variable("nu")
-        
+
         # Add a fallback check just in case
         if X_i is None:
             raise ValueError(f"Solver for agent {self.i} reported success but the solution is None.")

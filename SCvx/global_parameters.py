@@ -7,7 +7,7 @@ K = 100
 MAX_ITER = 30
 
 # Initial trust region radius
-TRUST_RADIUS0 = 20.0
+TRUST_RADIUS0 = 100.0
 
 # Tolerance for convergence (e.g., change in cost or trajectory)
 CONV_TOL = 1e-3

@@ -4,7 +4,7 @@ import numpy as np
 
 # ---------- Global parameters ----------
 K = 100  # discretisation points
-D_MIN = 0.5  # desired inter-agent buffer (used only for plotting)
+D_MIN = 0.0  # desired inter-agent buffer (used only for plotting)
 CLEARANCE = 0.05  # inflation band for initial guess / obstacle
 MARGIN = 1  # extra start/goal offset around obstacles
 

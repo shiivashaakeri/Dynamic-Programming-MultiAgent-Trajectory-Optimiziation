@@ -6,12 +6,17 @@ import time
 from typing import Dict, List, Tuple
 
 import numpy as np
+from tqdm import tqdm, trange
 
 from SCvx.discretization.first_order_hold import FirstOrderHold
 from SCvx.global_parameters import TRUST_RADIUS0, K
 from SCvx.models.SI_multi_agent_model import SI_MultiAgentModel
 from SCvx.optimization.si_agent_best_response import SI_AgentBestResponse
 from SCvx.utils.multi_agent_logging import print_iteration, print_summary
+
+# ------------------------------------------------------------------
+# Public solve interface
+# ------------------------------------------------------------------
 
 
 class SI_NashSolver:
@@ -35,35 +40,43 @@ class SI_NashSolver:
         self.br_solvers = [SI_AgentBestResponse(i, multi_agent_model) for i in range(self.N)]
         self.fohs = [FirstOrderHold(m, K) for m in multi_agent_model.models]
 
-    # ------------------------------------------------------------------
-    # Public solve interface
-    # ------------------------------------------------------------------
     def solve(
-        self, X_refs: List[np.ndarray], U_refs: List[np.ndarray], sigma_ref: float = 1.0, verbose: bool = False
+        self,
+        X_refs: List[np.ndarray],
+        U_refs: List[np.ndarray],
+        sigma_ref: float = 1.0,
+        verbose: bool = False,
+        show_progress: bool = True,
     ) -> Tuple[List[np.ndarray], List[np.ndarray], List[float]]:
-        """Run iterative best‑response until trajectories converge."""
+        """Run iterative best-response until trajectories converge."""
+        # initialize
         X_curr = [x.copy() for x in X_refs]
         U_curr = [u.copy() for u in U_refs]
         change_hist: List[float] = []
 
         t0 = time.time()
-        for it in range(self.max_iter):
+        # Outer Nash loop with progress bar
+        outer_iter = trange(self.max_iter, desc="Nash iters", disable=not show_progress)
+        for it in outer_iter:
             max_change = 0.0
             if verbose:
                 print(f"\n--- Nash outer iteration {it} ---")
 
             X_prev_all = [x.copy() for x in X_curr]
 
-            # loop over agents
-            for i, br in enumerate(self.br_solvers):
-                # linearised dynamics around current traj
+            # Inner per-agent loop with its own progress bar
+            agent_iter = tqdm(range(self.N), desc=f" Agents @ it {it + 1}", disable=not show_progress, leave=False)
+            for i in agent_iter:
+                br = self.br_solvers[i]
+
+                # 1) Linearise around current trajectory
                 mats = self.fohs[i].calculate_discretization(X_curr[i], U_curr[i], sigma_ref)
 
-                # neighbour data dicts
-                neigh_cur: Dict[int, np.ndarray] = {j: X_curr[j] for j in range(self.N) if j != i}
-                neigh_prev: Dict[int, np.ndarray] = {j: X_prev_all[j] for j in range(self.N) if j != i}
+                # 2) Gather neighbor trajectories
+                neigh_cur = {j: X_curr[j] for j in range(self.N) if j != i}
+                neigh_prev = {j: X_prev_all[j] for j in range(self.N) if j != i}
 
-                # setup convex BR problem
+                # 3) Setup convex best-response problem
                 br.setup(
                     X_ref=X_curr[i],
                     U_ref=U_curr[i],
@@ -75,7 +88,7 @@ class SI_NashSolver:
                     tr_radius=TRUST_RADIUS0,
                 )
 
-                # ACS inner loop (update slabs and resolve)
+                # 4) ACS inner loop (update slabs & re-solve)
                 for acs_it in range(self.max_acs_iters):
                     X_new, U_new, *_ = br.solve()
                     p_i = X_new[0:3, :]
@@ -84,15 +97,21 @@ class SI_NashSolver:
                     if np.linalg.norm(X_new - X_curr[i]) < self.acs_tol:
                         break
 
-                # accept
+                # 5) Accept update
                 delta = np.linalg.norm(X_new - X_curr[i])
                 max_change = max(max_change, delta)
                 X_curr[i], U_curr[i] = X_new, U_new
 
+                # 6) Verbose & progress postfix
                 if verbose:
                     print(f"  Agent {i}: ΔX={delta:.2e}")
+                if show_progress:
+                    agent_iter.set_postfix({"ΔX": f"{delta:.2e}"})
 
+            # record & check convergence
             change_hist.append(max_change)
+            if show_progress:
+                outer_iter.set_postfix({"max_change": f"{max_change:.2e}"})
             if verbose:
                 print_iteration(it, 0.0, 0.0, max_change, 0.0, max_change, 0.0, sigma_ref, 0.0)
             if max_change < self.tol:
@@ -100,6 +119,7 @@ class SI_NashSolver:
                     print("Converged.")
                 break
 
+        # final summary
         if verbose:
             print_summary(len(change_hist), sigma_ref, time.time() - t0)
         return X_curr, U_curr, change_hist
