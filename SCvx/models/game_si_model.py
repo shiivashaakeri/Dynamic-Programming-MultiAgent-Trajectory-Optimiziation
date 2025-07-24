@@ -1,6 +1,7 @@
 import cvxpy as cvx
 import numpy as np
 
+from SCvx.config.SI_default_game import COLL_RAD as GLOBAL_COLL_RAD
 from SCvx.global_parameters import K as GLOBAL_K
 from SCvx.models.single_integrator_model import SingleIntegratorModel
 from SCvx.utils.intersample_collision import (
@@ -29,11 +30,13 @@ class GameSIModel(SingleIntegratorModel):
         "path_weight",
     }
 
-    def __init__(self, *, r_init, r_final, obstacles=None, **kwargs):
+    def __init__(self, *, r_init, r_final, collision_radius=None, obstacles=None, **kwargs):
         # ----- store weights (with defaults) -----
         self.control_weight = kwargs.pop("control_weight", 1.0)
         self.collision_weight = kwargs.pop("collision_weight", 80.0)
-        self.collision_radius = kwargs.pop("collision_radius", 0.5)
+        self.collision_radius = (collision_radius
+                                 if collision_radius is not None
+                                 else GLOBAL_COLL_RAD)
         self.control_rate_weight = kwargs.pop("control_rate_weight", 5.0)
         self.curvature_weight = kwargs.pop("curvature_weight", 0.0)
         self.inertia_weight = kwargs.pop("inertia_weight", 0.0)
@@ -103,7 +106,7 @@ class GameSIModel(SingleIntegratorModel):
         # 5) Add slack penalty to the cost
         for s_var in self.coll_slacks:
             cost += self.collision_weight * cvx.sum(s_var)
-# --- Soft Intersample Collision Avoidance ---
+        # --- Soft Intersample Collision Avoidance ---
         # Penalize each inter-sample slack we created earlier
         for s in self.inter_slacks:
             cost += self.inter_slack_weight * s
@@ -161,25 +164,20 @@ class GameSIModel(SingleIntegratorModel):
                 for t_star in t_stars:
                     # compute margin & gradients
                     h0, grad_x, grad_u = linearize_h(
-                        xk       = X_nom[:, k],
-                        uk       = U_nom[:, k],
-                        t_star   = t_star,
-                        f        = f_seg,
-                        T        = np.eye(self.n_x),
-                        obstacle = obstacle,
+                        xk=X_nom[:, k],
+                        uk=U_nom[:, k],
+                        t_star=t_star,
+                        f=f_seg,
+                        T=np.eye(self.n_x),
+                        obstacle=obstacle,
                     )
 
                     # 1) create a non-neg slack for this minima
                     s = cvx.Variable(
-                        name=f"s_intersample_k{k}_obs{obs_idx}_t{int(t_star*1e3)}",
+                        name=f"s_intersample_k{k}_obs{obs_idx}_t{int(t_star * 1e3)}",
                         nonneg=True,
                     )
                     self.inter_slacks.append(s)
                     # 2) build the affine constraint + slack ≥ 0
-                    expr = (
-                       h0
-                        + grad_x @ (X_v[:, k] - X_nom[:, k])
-                        + grad_u @ (U_v[:, k] - U_nom[:, k])
-                        + s
-                    )
+                    expr = h0 + grad_x @ (X_v[:, k] - X_nom[:, k]) + grad_u @ (U_v[:, k] - U_nom[:, k]) + s
                     self.extra_constraints.append(expr >= 0)

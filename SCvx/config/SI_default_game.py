@@ -5,14 +5,14 @@ import numpy as np
 # ---------- Global parameters ----------
 K = 100  # discretisation points
 D_MIN = 0.0  # desired inter-agent buffer (used only for plotting)
-CLEARANCE = 0.05  # inflation band for initial guess / obstacle
-MARGIN = 1  # extra start/goal offset around obstacles
+CLEARANCE = 0.1  # inflation band for initial guess / obstacle
+MARGIN = 0.0  # extra start/goal offset around obstacles
 
 ROBOT_RADIUS = 0.5  # Each quadrotor has a physical radius of 0.3m
 # ---------- Static spherical obstacles ----------
 # List of (centre_xyz, radius)
 OBSTACLES = [
-    ([0.0, 0.0, 0.0], 0.8),  # main sphere at origin (r = 1 m)
+    ([0.0, 0.0, 0.0], 0.8),
 ]
 
 # ---------- Game-specific cost weights ----------
