@@ -3,7 +3,7 @@ from typing import List, Optional, Tuple
 import cvxpy as cvx
 import numpy as np
 
-from SCvx.config.SI_default_game import MARGIN
+from SCvx.config.SI_default_game import MARGIN_OBS
 from SCvx.global_parameters import K
 
 from .base_model import BaseModel
@@ -114,7 +114,7 @@ class SingleIntegratorModel(BaseModel):
             p_vec = np.array(p).reshape(
                 3,
             )
-            r_total = r + self.robot_radius + MARGIN  # total clearance including robot radius and margin
+            r_total = r + self.robot_radius + MARGIN_OBS  # total clearance including robot radius and margin
             # print(f"[Obstacle c={p_vec}   base r={r:.3f}   robot_radius={self.robot_radius:.3f}   "
             #       f"margin={MARGIN:.3f}   => total r_total={r_total:.3f}]")
             for k in range(K):

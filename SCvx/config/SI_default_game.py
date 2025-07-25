@@ -6,19 +6,20 @@ import numpy as np
 K = 100  # discretisation points
 D_MIN = 0.0  # desired inter-agent buffer (used only for plotting)
 CLEARANCE = 0.1  # inflation band for initial guess / obstacle
-MARGIN = 0.0  # extra start/goal offset around obstacles
+MARGIN_OBS = 0.0   # extra clearance around static obstacles
+MARGIN_AGT = 0.0   # extra buffer between agents
 
 ROBOT_RADIUS = 0.5  # Each quadrotor has a physical radius of 0.3m
 # ---------- Static spherical obstacles ----------
 # List of (centre_xyz, radius)
 OBSTACLES = [
-    ([0.0, 0.0, 0.0], 0.8),
+    ([0.0, 0.0, 0.0], 0.8)
 ]
 
 # ---------- Game-specific cost weights ----------
 CTRL_W = 5.0  # effort term ( ‖u‖² )
-COLL_W = 80.0  # weight on slack variables
-COLL_RAD = 2 * ROBOT_RADIUS + MARGIN  # collision radius (inflated by margin)
+COLL_W = 200.0  # weight on slack variables
+AGT_COLL_RAD = 2 * ROBOT_RADIUS + MARGIN_AGT  # collision radius (inflated by margin)
 CTRL_RATE_W = 5.0
 CURVATURE_W = 100.0
 
@@ -33,7 +34,7 @@ AGENT_PARAMS = [
         "robot_radius": ROBOT_RADIUS,
         "control_weight": CTRL_W,
         "collision_weight": COLL_W,
-        "collision_radius": COLL_RAD,
+        "collision_radius": AGT_COLL_RAD,
         "control_rate_weight": CTRL_RATE_W,
         "curvature_weight": CURVATURE_W,
     },
@@ -45,7 +46,7 @@ AGENT_PARAMS = [
         "robot_radius": ROBOT_RADIUS,
         "control_weight": CTRL_W,
         "collision_weight": COLL_W,
-        "collision_radius": COLL_RAD,
+        "collision_radius": AGT_COLL_RAD,
         "control_rate_weight": CTRL_RATE_W,
         "curvature_weight": CURVATURE_W,
     },
@@ -57,7 +58,7 @@ AGENT_PARAMS = [
         "robot_radius": ROBOT_RADIUS,
         "control_weight": CTRL_W,
         "collision_weight": COLL_W,
-        "collision_radius": COLL_RAD,
+        "collision_radius": AGT_COLL_RAD,
         "control_rate_weight": CTRL_RATE_W,
         "curvature_weight": CURVATURE_W,
     },
